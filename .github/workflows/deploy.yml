@@ -14,6 +14,9 @@ permissions:
 
 env:
   RESOURCE_GROUP: rg-triviador
+  # Region for the app. West Europe refused new customers, so default to Sweden Central.
+  # Change it without editing code: repo Settings -> Variables -> AZURE_LOCATION.
+  LOCATION: ${{ vars.AZURE_LOCATION || 'swedencentral' }}
 
 jobs:
   test:
@@ -76,7 +79,7 @@ jobs:
             --resource-group "$RESOURCE_GROUP" \
             --name "triviador-${GITHUB_RUN_NUMBER}" \
             --template-file infra/main.bicep \
-            --parameters image="${{ steps.image.outputs.ref }}" \
+            --parameters image="${{ steps.image.outputs.ref }}" location="$LOCATION" \
             --query properties.outputs.url.value \
             --output tsv)
           echo "### Triviador is live at $url" >> "$GITHUB_STEP_SUMMARY"
