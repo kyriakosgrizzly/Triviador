@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Triviador.Domain/Triviador.Domain.csproj" />
+    <Project Path="src/Triviador.Server/Triviador.Server.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Triviador.Domain.Tests/Triviador.Domain.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Triviador</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Lobby -->
+  <section id="lobby" class="screen">
+    <div class="lobby-card">
+      <h1 class="logo">Triviador</h1>
+      <p class="tagline">Answer fast. Answer close. Take the valley.</p>
+
+      <label class="field">
+        <span>Your name</span>
+        <input id="name-input" maxlength="20" autocomplete="off" spellcheck="false">
+      </label>
+
+      <div class="lobby-actions">
+        <button id="btn-bots" class="btn primary">Play vs bots</button>
+        <button id="btn-find" class="btn">Find match</button>
+      </div>
+
+      <div id="queue" class="queue" hidden>
+        <div class="spinner"></div>
+        <div>
+          <div id="queue-text" class="queue-text">Searching…</div>
+          <div id="queue-sub" class="queue-sub"></div>
+        </div>
+        <button id="btn-cancel" class="btn ghost small">Cancel</button>
+      </div>
+
+      <details class="rules">
+        <summary>How to play</summary>
+        <ol>
+          <li><b>Castles.</b> Each player places a castle (3 hit points).</li>
+          <li><b>Expansion.</b> Everyone guesses a number. Closest claims 2 territories, runner-up claims 1. Repeat until the map is full.</li>
+          <li><b>Battle.</b> Take turns attacking a neighbouring enemy territory. You and the defender get the same question; if you both get it right (or both wrong), a closest-guess tiebreak decides.</li>
+          <li><b>Castles fall</b> after 3 successful attacks, and their owner's land goes to the attacker.</li>
+          <li>Most land value after 4 battle rounds wins.</li>
+        </ol>
+      </details>
+
+      <div id="conn-status" class="conn-status">Connecting…</div>
+    </div>
+  </section>
+
+  <!-- Game -->
+  <section id="game" class="screen" hidden>
+    <header class="topbar">
+      <div class="logo small">Triviador</div>
+      <div id="banner" class="banner"></div>
+      <div id="round" class="round"></div>
+    </header>
+
+    <main class="board">
+      <div class="map-wrap">
+        <svg id="map" class="map" role="img" aria-label="Game map"></svg>
+      </div>
+
+      <aside class="side">
+        <div id="players" class="players"></div>
+        <div id="question" class="panel question" hidden></div>
+        <div id="result" class="panel result" hidden></div>
+        <div class="panel log-panel">
+          <div class="panel-title">Battle log</div>
+          <ol id="log" class="log"></ol>
+        </div>
+      </aside>
+    </main>
+
+    <div id="finished" class="overlay" hidden>
+      <div class="finish-card">
+        <h2 id="finish-title">Match over</h2>
+        <ol id="standings" class="standings"></ol>
+        <button id="btn-lobby" class="btn primary">Back to lobby</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="config.js"></script>
+  <script src="lib/signalr.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

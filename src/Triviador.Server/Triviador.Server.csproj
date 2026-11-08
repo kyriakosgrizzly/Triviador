@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <!--
+    Container image settings for `dotnet publish /t:PublishContainer` (no Dockerfile or Docker needed).
+    The base image is mcr.microsoft.com/dotnet/aspnet:10.0, which listens on port 8080 as a non-root user.
+    CI overrides ContainerRegistry / ContainerRepository / ContainerImageTags to push to GitHub Container Registry.
+  -->
+  <PropertyGroup>
+    <ContainerRepository>triviador</ContainerRepository>
+    <ContainerImageTags>latest</ContainerImageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ContainerPort Include="8080" Type="tcp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Triviador.Domain\Triviador.Domain.csproj" />
+  </ItemGroup>
+
+</Project>
