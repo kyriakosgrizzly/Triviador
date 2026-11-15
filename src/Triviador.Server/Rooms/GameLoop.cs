@@ -1,7 +1,11 @@
 namespace Triviador.Server.Rooms;
 
-/// <summary>Drives time in the game: question deadlines, bot moves, AFK takeovers and matchmaking.</summary>
-public sealed class GameLoop(MatchRegistry registry, Matchmaker matchmaker, ILogger<GameLoop> logger) : BackgroundService
+/// <summary>Drives time in the game: question deadlines, bot moves, AFK takeovers, matchmaking and lobby expiry.</summary>
+public sealed class GameLoop(
+    MatchRegistry registry,
+    Matchmaker matchmaker,
+    LobbyRegistry lobbies,
+    ILogger<GameLoop> logger) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromMilliseconds(200);
 
@@ -14,6 +18,7 @@ public sealed class GameLoop(MatchRegistry registry, Matchmaker matchmaker, ILog
             {
                 await matchmaker.TickAsync();
                 await registry.TickAllAsync();
+                await lobbies.TickAsync();
             }
             catch (Exception ex)
             {

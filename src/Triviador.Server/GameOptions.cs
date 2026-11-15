@@ -4,8 +4,11 @@ public sealed class GameOptions
 {
     public const string Section = "Game";
 
-    /// <summary>How long a lone player waits in the queue before bots fill the empty seats.</summary>
-    public int BotFillAfterSeconds { get; set; } = 12;
+    /// <summary>
+    /// If above 0, players left waiting in a matchmaking queue this long get bots automatically.
+    /// 0 (default): nobody is auto-filled — anyone waiting can press "Add bots and start" instead.
+    /// </summary>
+    public int BotFillAfterSeconds { get; set; }
 
     /// <summary>How long a human may take on their turn before a bot moves for them.</summary>
     public int TurnTimeoutSeconds { get; set; } = 20;

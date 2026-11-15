@@ -14,17 +14,17 @@ namespace Triviador.Server.Rooms;
 /// because the engine is single-threaded. Broadcasting happens inside the lock too, so clients
 /// always receive updates in order.
 /// </summary>
-public sealed class MatchRoom
+public sealed class MatchRoom : IGameRoom
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly IHubContext<GameHub, IGameClient> _hub;
     private readonly TimeProvider _time;
     private readonly GameOptions _options;
     private readonly Random _rng;
-    private readonly IReadOnlyList<string> _humanIds;
 
     private readonly Dictionary<PlayerId, BotPlayer> _bots;
-    private readonly Dictionary<PlayerId, BotPlayer> _afkStandIns;
+    private readonly Dictionary<PlayerId, BotPlayer> _standIns;
+    private readonly HashSet<PlayerId> _left = [];
     private readonly Dictionary<PlayerId, DateTimeOffset> _botReadyAt = new();
 
     private DecisionKey _decision;
@@ -48,9 +48,10 @@ public sealed class MatchRoom
         Map = ToDto(Match.Map);
 
         Humans = players.Where(p => !p.IsBot).Select(p => p.Id).ToList();
-        _humanIds = Humans.Select(h => h.Value).ToList();
         _bots = players.Where(p => p.IsBot).ToDictionary(p => p.Id, p => new BotPlayer(p.Id, rng, botAccuracy[p.Id]));
-        _afkStandIns = Humans.ToDictionary(h => h, h => new BotPlayer(h, rng, accuracy: 0));
+
+        // A stand-in plays a human's turns when they go AFK, and everything once they leave.
+        _standIns = Humans.ToDictionary(h => h, h => new BotPlayer(h, rng, accuracy: 0.3));
         _decisionSince = time.GetUtcNow();
     }
 
@@ -60,13 +61,19 @@ public sealed class MatchRoom
     public IReadOnlyList<PlayerId> Humans { get; }
     public DateTimeOffset? FinishedAt { get; private set; }
 
+    /// <summary>True once the match is over, or every human has left.</summary>
+    public bool IsOver => FinishedAt is not null;
+
+    private IReadOnlyList<string> ConnectedHumanIds =>
+        Humans.Where(h => !_left.Contains(h)).Select(h => h.Value).ToList();
+
     public async Task StartAsync()
     {
         await _gate.WaitAsync();
         try
         {
             Match.Start();
-            await _hub.Clients.Users(_humanIds).MatchJoined(Map, BuildState());
+            await _hub.Clients.Users(ConnectedHumanIds).MatchJoined(Map, BuildState());
             await FlushAsync();
         }
         finally
@@ -96,6 +103,35 @@ public sealed class MatchRoom
         }
     }
 
+    /// <summary>
+    /// A human quits. A bot takes over their seat straight away, so nobody waits for them.
+    /// If no humans are left, the room closes instead of playing on for nobody.
+    /// </summary>
+    public async Task LeaveAsync(PlayerId player)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            if (IsOver || !Humans.Contains(player) || !_left.Add(player)) return;
+
+            if (_left.Count == Humans.Count)
+            {
+                FinishedAt = _time.GetUtcNow();
+                return;
+            }
+
+            // Tell the others, so their player list shows who left.
+            await _hub.Clients.Users(ConnectedHumanIds).MatchUpdated([], BuildState());
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task SendJoinedAsync(IGameClient client, PlayerId viewer) =>
+        await client.MatchJoined(Map, await GetStateAsync());
+
     public async Task<GameStateDto> GetStateAsync()
     {
         await _gate.WaitAsync();
@@ -112,11 +148,13 @@ public sealed class MatchRoom
     /// <summary>Called by the game loop a few times a second: deadlines, bots, AFK humans.</summary>
     public async Task TickAsync()
     {
-        if (FinishedAt is not null) return;
+        if (IsOver) return;
 
         await _gate.WaitAsync();
         try
         {
+            if (IsOver) return;
+
             var now = _time.GetUtcNow();
             Match.Tick();
             TrackDecision(now);
@@ -143,9 +181,12 @@ public sealed class MatchRoom
         _botReadyAt.Clear();
     }
 
+    private IEnumerable<BotPlayer> ActiveBots() =>
+        _bots.Values.Concat(_left.Select(p => _standIns[p]));
+
     private void DriveBots(DateTimeOffset now)
     {
-        foreach (var bot in _bots.Values)
+        foreach (var bot in ActiveBots())
         {
             var pending = bot.Pending(Match);
             if (pending == PendingAction.None)
@@ -167,7 +208,7 @@ public sealed class MatchRoom
 
     private void CoverAfkHumans(DateTimeOffset now)
     {
-        if (Match.CurrentTurn is not { } turn || !_afkStandIns.TryGetValue(turn, out var standIn))
+        if (Match.CurrentTurn is not { } turn || _left.Contains(turn) || !_standIns.TryGetValue(turn, out var standIn))
             return;
 
         if (now - _decisionSince >= TimeSpan.FromSeconds(_options.TurnTimeoutSeconds))
@@ -196,7 +237,7 @@ public sealed class MatchRoom
             FinishedAt ??= _time.GetUtcNow();
 
         var dtos = events.Select(e => new EventDto(e.GetType().Name, e)).ToList();
-        await _hub.Clients.Users(_humanIds).MatchUpdated(dtos, BuildState());
+        await _hub.Clients.Users(ConnectedHumanIds).MatchUpdated(dtos, BuildState());
     }
 
     private GameStateDto BuildState()
@@ -214,7 +255,7 @@ public sealed class MatchRoom
 
         var players = snapshot.Players.Select((p, seat) => new PlayerStateDto(
             p.Info.Id, p.Info.Name, p.Info.IsBot, seat, p.Score, p.TerritoryCount,
-            p.CastleTerritoryId, p.CastleHitPoints, p.Eliminated)).ToList();
+            p.CastleTerritoryId, p.CastleHitPoints, p.Eliminated, _left.Contains(p.Info.Id))).ToList();
 
         return new GameStateDto(
             snapshot.MatchId,

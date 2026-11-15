@@ -31,6 +31,21 @@ let lastAttack = null;     // { attacker, defender, territoryId }
 let lastResult = null;     // { question, correctAnswer, results }
 let pickedOption = null;   // what I clicked on the open MC question
 let renderedQuestionKey = null;
+let lobby = null;          // LobbyDto of the private game I'm in, if any
+let inviteCode = readInviteCode(); // ?game=CODE from an invite link, until joined or declined
+
+function readInviteCode() {
+  const code = new URLSearchParams(location.search).get("game");
+  return code && /^[A-Za-z0-9]{4,12}$/.test(code) ? code.toUpperCase() : null;
+}
+
+/** Keeps ?game=CODE in the address bar while in a private game, so a refresh rejoins it. */
+function setUrlCode(code) {
+  const url = code ? `${location.pathname}?game=${encodeURIComponent(code)}` : location.pathname;
+  history.replaceState(null, "", url);
+}
+
+function shareLink(code) { return `${location.origin}${location.pathname}?game=${encodeURIComponent(code)}`; }
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -51,9 +66,18 @@ async function connect(name) {
   conn.on("MatchJoined", onMatchJoined);
   conn.on("MatchUpdated", onMatchUpdated);
   conn.on("QueueStatus", renderQueue);
+  conn.on("LobbyUpdated", onLobbyUpdated);
+  conn.on("ConquestJoined", (rules, s) => Conquest.joined(rules, s));
+  conn.on("ConquestUpdated", (events, s) => Conquest.updated(events, s));
+  conn.on("CardsJoined", (rules, s) => Cards.joined(rules, s));
+  conn.on("CardsUpdated", (events, s) => Cards.updated(events, s));
 
   conn.onreconnecting(() => setConnStatus("Reconnecting…"));
-  conn.onreconnected(() => setConnStatus("Connected"));
+  conn.onreconnected(() => {
+    setConnStatus("Connected");
+    // The server drops you from a private game when the connection drops; step back in.
+    if (lobby && !state) invoke("JoinPrivateGame", lobby.code);
+  });
   conn.onclose(() => setConnStatus("Disconnected — refresh to reconnect"));
 
   setConnStatus("Connecting…");
@@ -82,6 +106,16 @@ function showError(err) {
 
 // ------------------------------------------------------------------ server messages
 
+/** Shared clean-up when any game starts: leave the lobby/invite state behind. */
+function enteringGame() {
+  lobby = null;
+  inviteCode = null;
+  setUrlCode(null);
+  store.set("triviador.lobby", "");
+  $("#queue").hidden = true;
+  setLobbyBusy(false);
+}
+
 function onMatchJoined(mapDto, s) {
   map = mapDto;
   state = null;
@@ -90,9 +124,13 @@ function onMatchJoined(mapDto, s) {
   lastResult = null;
   pickedOption = null;
   renderedQuestionKey = null;
+  enteringGame();
+  Conquest.reset();
+  Cards.reset();
   $("#log").innerHTML = "";
   $("#queue").hidden = true;
   $("#finished").hidden = true;
+  $("#confirm-leave").hidden = true;
   $("#lobby").hidden = true;
   $("#game").hidden = false;
   buildMap();
@@ -319,12 +357,14 @@ function renderBanner() {
 function renderPlayers() {
   $("#players").innerHTML = state.players.map((p) => {
     const hearts = [0, 1, 2].map((i) => `<i class="${i < p.castleHitPoints ? "on" : ""}"></i>`).join("");
-    const classes = ["player", `seat-${p.seat}`, p.id === state.currentTurn ? "turn" : "", p.eliminated ? "out" : ""].join(" ");
+    const classes = ["player", `seat-${p.seat}`, p.id === state.currentTurn ? "turn" : "",
+      p.eliminated ? "out" : "", p.left ? "left" : ""].join(" ");
+    const tag = isMe(p.id) ? '<span class="tag">YOU</span>' : p.left ? '<span class="tag">LEFT · BOT PLAYS</span>' : "";
     return `
       <div class="${classes}">
         <div class="swatch"></div>
         <div>
-          <div class="p-name">${esc(p.name)}${isMe(p.id) ? '<span class="tag">YOU</span>' : ""}</div>
+          <div class="p-name">${esc(p.name)}${tag}</div>
           <div class="p-meta">
             <span>${p.territories} land</span>
             <span class="hearts" title="Castle hit points">${hearts}</span>
@@ -433,7 +473,9 @@ function renderResult() {
 
 function renderFinished() {
   const overlay = $("#finished");
+  $("#btn-leave").hidden = state.phase === "Finished";
   if (state.phase !== "Finished" || !state.standings) { overlay.hidden = true; return; }
+  $("#confirm-leave").hidden = true;
 
   const mine = state.standings.find((s) => isMe(s.player));
   $("#finish-title").textContent = mine && mine.place === 1 ? "Victory!" : "Match over";
@@ -482,13 +524,122 @@ function renderQueue(q) {
   if (!q.searching) { box.hidden = true; setLobbyBusy(false); return; }
   box.hidden = false;
   setLobbyBusy(true);
-  $("#queue-text").textContent = `Searching… ${q.playersWaiting}/3 players`;
-  $("#queue-sub").textContent = q.secondsUntilBots > 0 ? `Bots fill empty seats in ${q.secondsUntilBots}s` : "Adding bots…";
+  const what = q.mode === "cards" ? "Quiz Cards" : "Quick match";
+  $("#queue-text").textContent = `${what}: searching… ${q.playersWaiting}/${q.seats || 3} players`;
+  const addBots = $("#btn-add-bots");
+  if (q.secondsUntilBots >= 0) {
+    // Server configured to fill with bots automatically.
+    $("#queue-sub").textContent = q.secondsUntilBots > 0 ? `Bots fill empty seats in ${q.secondsUntilBots}s` : "Adding bots…";
+    addBots.hidden = true;
+  } else {
+    const missing = q.botsToAdd || 0;
+    $("#queue-sub").textContent = missing > 0
+      ? "Waiting for more players — or fill the empty seats with bots."
+      : "Starting…";
+    addBots.hidden = missing === 0;
+    addBots.disabled = false;
+    addBots.textContent = `Add ${missing} bot${missing === 1 ? "" : "s"} and start`;
+  }
 }
 
 function setLobbyBusy(busy) {
   $("#btn-bots").disabled = busy;
   $("#btn-find").disabled = busy;
+  $("#btn-invite").disabled = busy;
+  $("#btn-conquest").disabled = busy;
+  $("#btn-cards").disabled = busy;
+  $("#btn-cards-find").disabled = busy;
+  $("#btn-cards-invite").disabled = busy;
+}
+
+let conquestSeats = 3;
+let cardsSeats = 3;
+
+// ------------------------------------------------------------------ private games
+
+function onLobbyUpdated(l) {
+  lobby = l;
+  if (l) {
+    inviteCode = null;
+    setUrlCode(l.code);
+    store.set("triviador.lobby", l.code);
+  } else {
+    store.set("triviador.lobby", "");
+    if (!state) setUrlCode(inviteCode);
+  }
+  renderPrivate();
+}
+
+function renderPrivate() {
+  const inLobby = !!lobby;
+  $("#private").hidden = !inLobby;
+  $("#invite").hidden = inLobby || !inviteCode;
+  $("#lobby-actions").hidden = inLobby;
+  if (inviteCode) $("#invite-code").textContent = inviteCode;
+  if (!inLobby) return;
+
+  const amHost = lobby.host === playerId;
+  $("#private-code").textContent = lobby.code;
+  const friends = lobby.maxPlayers - 1;
+  $("#private-invite-sub").textContent = `Send this link to up to ${friends} friend${friends === 1 ? "" : "s"}`;
+  $("#share-link").value = shareLink(lobby.code);
+  $("#btn-share").hidden = !navigator.share;
+
+  const rows = lobby.players.map((p) => {
+    const tags = [p.id === lobby.host ? "HOST" : "", isMe(p.id) ? "YOU" : ""].filter(Boolean)
+      .map((t) => `<span class="tag">${t}</span>`).join("");
+    return `<li><span>${esc(p.name)}${tags}</span></li>`;
+  });
+  for (let i = lobby.players.length; i < lobby.maxPlayers; i++) rows.push('<li class="empty">Waiting for a friend… (or a bot)</li>');
+  $("#private-players").innerHTML = rows.join("");
+
+  const conquest = lobby.mode === "conquest";
+  const flexible = conquest || lobby.mode === "cards";
+  for (const b of document.querySelectorAll("#private-mode .mode-btn")) {
+    b.classList.toggle("on", b.dataset.mode === lobby.mode);
+    b.disabled = !amHost;
+  }
+  $("#private-seats").hidden = !flexible;
+  for (const b of document.querySelectorAll("#private-seats .seat")) {
+    const n = Number(b.dataset.seats);
+    b.classList.toggle("on", n === lobby.maxPlayers);
+    b.disabled = !amHost || n < lobby.players.length;
+  }
+  $("#private-mode").hidden = !amHost;
+  const modeName = { quick: "Quick match", conquest: "Conquest", cards: "Quiz Cards" }[lobby.mode] || "Quick match";
+  $("#private-mode-label").textContent = amHost ? "" : `${modeName} · ${lobby.maxPlayers} players`;
+
+  const empty = lobby.maxPlayers - lobby.players.length;
+  $("#btn-start").hidden = !amHost;
+  $("#private-note").textContent = amHost
+    ? (empty > 0 ? `Start whenever you're ready. ${empty === 1 ? "The empty seat gets a bot" : "Empty seats get bots"}.` : "Everyone's here!")
+    : "Waiting for the host to start the game…";
+}
+
+async function copyLink() {
+  const input = $("#share-link");
+  try {
+    await navigator.clipboard.writeText(input.value);
+  } catch {
+    input.select();
+    document.execCommand("copy");
+  }
+  const btn = $("#btn-copy");
+  btn.textContent = "Copied!";
+  setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+}
+
+// ------------------------------------------------------------------ navigation
+
+function goToLobby() {
+  state = null;
+  Conquest.reset();
+  Cards.reset();
+  $("#finished").hidden = true;
+  $("#confirm-leave").hidden = true;
+  $("#game").hidden = true;
+  $("#lobby").hidden = false;
+  renderPrivate();
 }
 
 function currentName() {
@@ -497,31 +648,85 @@ function currentName() {
   return name;
 }
 
+/** Connects with the current name, then runs a hub call. Returns its result, or undefined on error. */
+async function act(method, ...args) {
+  try {
+    await connect(currentName());
+    return await conn.invoke(method, ...args);
+  } catch (e) {
+    showError(e);
+    return undefined;
+  }
+}
+
 async function start() {
   const nameInput = $("#name-input");
   nameInput.value = store.get("triviador.name") || `Player-${playerId.slice(0, 4)}`;
 
-  $("#btn-bots").onclick = async () => {
-    try { await connect(currentName()); } catch (e) { return showError(e); }
-    invoke("PlayVsBots");
-  };
-  $("#btn-find").onclick = async () => {
-    try { await connect(currentName()); } catch (e) { return showError(e); }
-    invoke("FindMatch");
-  };
+  $("#btn-bots").onclick = () => act("PlayVsBots");
+  $("#btn-find").onclick = () => act("FindMatch");
   $("#btn-cancel").onclick = () => invoke("CancelSearch");
-  $("#btn-lobby").onclick = () => {
-    invoke("LeaveMatch");
-    state = null;
-    $("#finished").hidden = true;
-    $("#game").hidden = true;
-    $("#lobby").hidden = false;
-  };
 
+  $("#btn-invite").onclick = () => act("CreatePrivateGame");
+  $("#btn-conquest").onclick = () => act("PlayConquestVsBots", conquestSeats);
+  for (const b of document.querySelectorAll("#mode-conquest .seat")) {
+    b.onclick = () => {
+      conquestSeats = Number(b.dataset.seats);
+      for (const x of document.querySelectorAll("#mode-conquest .seat")) x.classList.toggle("on", x === b);
+    };
+  }
+  $("#btn-cards").onclick = () => act("PlayCardsVsBots", cardsSeats);
+  $("#btn-cards-find").onclick = () => act("FindCardsMatch");
+  $("#btn-cards-invite").onclick = () => act("CreatePrivateGameFor", "cards", cardsSeats);
+  $("#btn-add-bots").onclick = () => { $("#btn-add-bots").disabled = true; invoke("StartQueueWithBots"); };
+  for (const b of document.querySelectorAll("#mode-cards .seat")) {
+    b.onclick = () => {
+      cardsSeats = Number(b.dataset.seats);
+      for (const x of document.querySelectorAll("#mode-cards .seat")) x.classList.toggle("on", x === b);
+    };
+  }
+  for (const b of document.querySelectorAll("#private-mode .mode-btn")) {
+    b.onclick = () => invoke("SetPrivateGameMode", b.dataset.mode, lobby ? Math.max(lobby.players.length, 3) : 3);
+  }
+  for (const b of document.querySelectorAll("#private-seats .seat")) {
+    b.onclick = () => invoke("SetPrivateGameMode", lobby ? lobby.mode : "conquest", Number(b.dataset.seats));
+  }
+  Conquest.wire();
+  Cards.wire();
+  Conquest.loadWorld().catch(() => {});
+  $("#btn-join-invite").onclick = async () => {
+    const code = inviteCode;
+    try {
+      await connect(currentName());
+      await conn.invoke("JoinPrivateGame", code);
+    } catch (e) {
+      showError(e);
+      inviteCode = null;   // dead or full game: drop the link and show the normal lobby
+      setUrlCode(null);
+      renderPrivate();
+    }
+  };
+  $("#btn-decline").onclick = () => { inviteCode = null; setUrlCode(null); renderPrivate(); };
+  $("#btn-copy").onclick = copyLink;
+  $("#btn-share").onclick = () => navigator.share({ title: "Triviador", text: "Join my Triviador game!", url: $("#share-link").value }).catch(() => {});
+  $("#btn-start").onclick = () => invoke("StartPrivateGame");
+  $("#btn-leave-private").onclick = () => invoke("LeavePrivateGame");
+
+  $("#btn-leave").onclick = () => { $("#confirm-leave").hidden = false; };
+  $("#btn-stay").onclick = () => { $("#confirm-leave").hidden = true; };
+  $("#btn-confirm-leave").onclick = () => { invoke("LeaveMatch"); goToLobby(); };
+  $("#btn-lobby").onclick = () => { invoke("LeaveMatch"); goToLobby(); };
+
+  renderPrivate();
   requestAnimationFrame(tickTimer);
 
   // Connect right away so a page refresh drops you back into a running match.
-  try { await connect(currentName()); } catch (e) { setConnStatus("Can't reach the server"); }
+  try { await connect(currentName()); } catch (e) { setConnStatus("Can't reach the server"); return; }
+
+  // Refreshed while waiting in a private game: step straight back in.
+  if (inviteCode && store.get("triviador.lobby") === inviteCode && !state) {
+    invoke("JoinPrivateGame", inviteCode);
+  }
 }
 
 start();

@@ -11,11 +11,18 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IUserIdProvider, PlayerIdProvider>();
 builder.Services.AddSingleton<MatchRegistry>();
 builder.Services.AddSingleton<Matchmaker>();
+builder.Services.AddSingleton<LobbyRegistry>();
+builder.Services.AddSingleton<ConnectionTracker>();
 builder.Services.AddHostedService<GameLoop>();
 
 builder.Services
     .AddSignalR()
-    .AddJsonProtocol(o => o.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+    .AddJsonProtocol(o =>
+    {
+        o.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+        // Conquest orders are a list of mixed types tagged with "kind"; accept the tag in any position.
+        o.PayloadSerializerOptions.AllowOutOfOrderMetadataProperties = true;
+    });
 
 var app = builder.Build();
 

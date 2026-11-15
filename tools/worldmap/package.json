@@ -1,0 +1,12 @@
+{
+  "name": "triviador-worldmap",
+  "private": true,
+  "type": "module",
+  "description": "Builds the Conquest world map (regions, borders, adjacency) from Natural Earth data.",
+  "scripts": { "build": "node build.mjs" },
+  "dependencies": {
+    "d3-geo": "3.1.1",
+    "topojson-client": "3.1.0",
+    "world-atlas": "2.0.2"
+  }
+}

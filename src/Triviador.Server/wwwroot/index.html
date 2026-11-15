@@ -21,9 +21,85 @@
         <input id="name-input" maxlength="20" autocomplete="off" spellcheck="false">
       </label>
 
-      <div class="lobby-actions">
+      <!-- Arrived through someone's invite link -->
+      <div id="invite" class="private" hidden>
+        <div class="private-title">You're invited to a private game</div>
+        <div class="private-sub">Game code <b id="invite-code"></b>. Set your name above, then join.</div>
+        <div class="private-actions">
+          <button id="btn-join-invite" class="btn primary">Join game</button>
+          <button id="btn-decline" class="btn ghost">No thanks</button>
+        </div>
+      </div>
+
+      <div id="lobby-actions" class="lobby-actions">
         <button id="btn-bots" class="btn primary">Play vs bots</button>
         <button id="btn-find" class="btn">Find match</button>
+        <button id="btn-invite" class="btn wide">Invite friends</button>
+
+        <div id="mode-conquest" class="mode-card wide">
+          <div>
+            <div class="mode-title">Conquest</div>
+            <div class="mode-sub">World map · resources · buildings · armies</div>
+          </div>
+          <div class="seat-picker" role="group" aria-label="Players">
+            <button class="seat" data-seats="2">2</button>
+            <button class="seat on" data-seats="3">3</button>
+            <button class="seat" data-seats="4">4</button>
+          </div>
+          <button id="btn-conquest" class="btn primary">Conquest vs bots</button>
+        </div>
+
+        <div id="mode-cards" class="mode-card cards wide">
+          <div>
+            <div class="mode-title">Quiz Cards <span class="new">NEW</span></div>
+            <div class="mode-sub">Uno with questions · match the category · steal answers</div>
+          </div>
+          <div class="seat-picker" role="group" aria-label="Players">
+            <button class="seat" data-seats="2">2</button>
+            <button class="seat on" data-seats="3">3</button>
+            <button class="seat" data-seats="4">4</button>
+          </div>
+          <div class="mode-actions">
+            <button id="btn-cards" class="btn primary">Play vs bots</button>
+            <button id="btn-cards-find" class="btn">Find players</button>
+            <button id="btn-cards-invite" class="btn">Invite friends</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Inside a private game, waiting for the host to start -->
+      <div id="private" class="private" hidden>
+        <div class="private-head">
+          <div>
+            <div class="private-title">Private game</div>
+            <div id="private-invite-sub" class="private-sub">Send this link to up to 2 friends</div>
+          </div>
+          <div id="private-code" class="code"></div>
+        </div>
+        <div class="share">
+          <input id="share-link" readonly aria-label="Invite link">
+          <button id="btn-copy" class="btn small">Copy</button>
+          <button id="btn-share" class="btn small" hidden>Share</button>
+        </div>
+        <div id="private-mode" class="private-mode">
+          <div class="mode-toggle" role="group" aria-label="Game mode">
+            <button class="mode-btn" data-mode="quick">Quick match</button>
+            <button class="mode-btn" data-mode="conquest">Conquest</button>
+            <button class="mode-btn" data-mode="cards">Quiz Cards</button>
+          </div>
+          <div id="private-seats" class="seat-picker" role="group" aria-label="Seats">
+            <button class="seat" data-seats="2">2</button>
+            <button class="seat" data-seats="3">3</button>
+            <button class="seat" data-seats="4">4</button>
+          </div>
+        </div>
+        <div id="private-mode-label" class="private-sub"></div>
+        <ul id="private-players" class="private-players"></ul>
+        <div id="private-note" class="private-sub"></div>
+        <div class="private-actions">
+          <button id="btn-start" class="btn primary">Start game</button>
+          <button id="btn-leave-private" class="btn ghost">Leave</button>
+        </div>
       </div>
 
       <div id="queue" class="queue" hidden>
@@ -33,6 +109,7 @@
           <div id="queue-sub" class="queue-sub"></div>
         </div>
         <button id="btn-cancel" class="btn ghost small">Cancel</button>
+        <button id="btn-add-bots" class="btn primary small queue-bots" hidden>Add bots and start</button>
       </div>
 
       <details class="rules">
@@ -55,7 +132,10 @@
     <header class="topbar">
       <div class="logo small">Triviador</div>
       <div id="banner" class="banner"></div>
-      <div id="round" class="round"></div>
+      <div class="topbar-right">
+        <span id="round" class="round"></span>
+        <button id="btn-leave" class="btn ghost small">Leave</button>
+      </div>
     </header>
 
     <main class="board">
@@ -81,12 +161,166 @@
         <button id="btn-lobby" class="btn primary">Back to lobby</button>
       </div>
     </div>
+
+    <div id="confirm-leave" class="overlay" hidden>
+      <div class="finish-card">
+        <h2>Leave match?</h2>
+        <p class="confirm-text">A bot takes over your seat and finishes the game.</p>
+        <div class="private-actions center">
+          <button id="btn-stay" class="btn">Stay</button>
+          <button id="btn-confirm-leave" class="btn primary">Leave match</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Conquest -->
+  <section id="conquest" class="screen" hidden>
+    <header class="topbar cq-topbar">
+      <div class="logo small">Conquest</div>
+      <div id="cq-banner" class="banner"></div>
+      <div class="topbar-right">
+        <div id="cq-wallet" class="wallet"></div>
+        <span id="cq-round" class="round"></span>
+        <button id="cq-leave" class="btn ghost small">Leave</button>
+      </div>
+    </header>
+    <div class="cq-clock"><div id="cq-clock-bar"></div></div>
+
+    <main class="board cq-board">
+      <div class="map-wrap cq-map-wrap">
+        <svg id="cq-map" class="cq-map" role="img" aria-label="World map"></svg>
+        <div class="map-tools">
+          <button id="cq-zoom-in" class="btn small" aria-label="Zoom in">+</button>
+          <button id="cq-zoom-out" class="btn small" aria-label="Zoom out">−</button>
+          <button id="cq-zoom-reset" class="btn small">Reset</button>
+        </div>
+        <div class="legend">
+          <span><i class="res res-gold"></i>Gold</span>
+          <span><i class="res res-manpower"></i>Manpower</span>
+          <span><i class="res res-production"></i>Production</span>
+          <span>★ capital</span>
+          <span>🏰 number = castle level</span>
+        </div>
+      </div>
+
+      <aside class="side">
+        <div id="cq-players" class="players"></div>
+        <div id="cq-panel" class="panel"></div>
+        <div id="cq-result" class="panel result" hidden></div>
+        <div class="panel log-panel">
+          <div class="panel-title">War log</div>
+          <ol id="cq-log" class="log"></ol>
+        </div>
+      </aside>
+    </main>
+
+    <div id="cq-finished" class="overlay" hidden>
+      <div class="finish-card">
+        <h2 id="cq-finish-title">Game over</h2>
+        <ol id="cq-standings" class="standings"></ol>
+        <button id="cq-lobby" class="btn primary">Back to lobby</button>
+      </div>
+    </div>
+
+    <div id="cq-confirm-leave" class="overlay" hidden>
+      <div class="finish-card">
+        <h2>Leave game?</h2>
+        <p class="confirm-text">A bot takes over your empire and plays it to the end.</p>
+        <div class="private-actions center">
+          <button id="cq-stay" class="btn">Stay</button>
+          <button id="cq-confirm-leave-btn" class="btn primary">Leave game</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quiz Cards -->
+  <section id="cards" class="screen" hidden>
+    <header class="topbar">
+      <div class="logo small">Quiz Cards</div>
+      <div id="k-banner" class="banner"></div>
+      <div class="topbar-right">
+        <span id="k-round" class="round"></span>
+        <button id="k-fullscreen" class="btn ghost small" title="Full screen (F)">⛶ Full screen</button>
+        <button id="k-leave" class="btn ghost small">Leave</button>
+      </div>
+    </header>
+    <div class="cq-clock"><div id="k-clock-bar"></div></div>
+
+    <main class="board k-board">
+      <div class="k-table">
+        <div class="k-center">
+          <div id="k-pile" class="k-pile" title="Draw a card">
+            <div class="k-card back"><span class="k-face">?</span></div>
+            <div class="k-count"></div>
+          </div>
+          <div class="k-top-wrap">
+            <div id="k-top"></div>
+            <div class="k-now-row"><span id="k-now"></span> <span id="k-dir" class="k-dir"></span></div>
+          </div>
+          <div id="k-question" class="panel question k-question" hidden></div>
+        </div>
+
+        <div id="k-chooser" class="panel k-chooser" hidden></div>
+
+        <div class="k-hand-wrap">
+          <div class="k-hand-head">
+            <div id="k-hand-title" class="panel-title"></div>
+            <button id="k-draw" class="btn small">Draw a card</button>
+          </div>
+          <div id="k-hand" class="k-hand"></div>
+        </div>
+      </div>
+
+      <aside class="side k-side">
+        <div id="k-players" class="players"></div>
+        <details class="panel k-help">
+          <summary>Card guide</summary>
+          <ul>
+            <li><b>Number</b> — match the category or the number.</li>
+            <li><b>🔒 Lockout</b> — nobody can steal the next player's question.</li>
+            <li><b>⇄ Hot Seat</b> — reverse; the next player gets no head start.</li>
+            <li><b>?! Pop Quiz</b> — next player answers first; wrong draws 2.</li>
+            <li><b>◆ Pick Your Topic</b> — wild: choose the category.</li>
+            <li><b>⚔ Duel</b> — wild: you vs an opponent, loser draws 4.</li>
+            <li>Wrong answer: card is spent, you draw 2. Nobody answers: card comes back, draw 1.</li>
+            <li>Keys <b>1–4</b> answer, <b>F</b> full screen.</li>
+          </ul>
+        </details>
+        <div class="panel log-panel">
+          <div class="panel-title">Table talk</div>
+          <ol id="k-log" class="log"></ol>
+        </div>
+      </aside>
+    </main>
+
+    <div id="k-finished" class="overlay" hidden>
+      <div class="finish-card">
+        <h2 id="k-finish-title">Game over</h2>
+        <ol id="k-standings" class="standings"></ol>
+        <button id="k-lobby" class="btn primary">Back to lobby</button>
+      </div>
+    </div>
+
+    <div id="k-confirm-leave" class="overlay" hidden>
+      <div class="finish-card">
+        <h2>Leave game?</h2>
+        <p class="confirm-text">A bot takes over your hand and plays it to the end.</p>
+        <div class="private-actions center">
+          <button id="k-stay" class="btn">Stay</button>
+          <button id="k-confirm-leave-btn" class="btn primary">Leave game</button>
+        </div>
+      </div>
+    </div>
   </section>
 
   <div id="toast" class="toast" hidden></div>
 
   <script src="config.js"></script>
   <script src="lib/signalr.min.js"></script>
+  <script src="conquest.js"></script>
+  <script src="cards.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

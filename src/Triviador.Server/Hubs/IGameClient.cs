@@ -12,4 +12,19 @@ public interface IGameClient
     Task MatchUpdated(IReadOnlyList<EventDto> events, GameStateDto state);
 
     Task QueueStatus(QueueStatusDto status);
+
+    /// <summary>The private game you're in changed. Null means you're no longer in one.</summary>
+    Task LobbyUpdated(LobbyDto? lobby);
+
+    /// <summary>A Conquest game started (or you reconnected to one): the rules plus your view of the game.</summary>
+    Task ConquestJoined(ConquestRulesDto rules, ConquestStateDto state);
+
+    /// <summary>Something happened in your Conquest game.</summary>
+    Task ConquestUpdated(IReadOnlyList<EventDto> events, ConquestStateDto state);
+
+    /// <summary>A Quiz Cards game started (or you reconnected to one): the rules plus your view of the game.</summary>
+    Task CardsJoined(CardsRulesDto rules, CardsStateDto state);
+
+    /// <summary>Something happened in your Quiz Cards game.</summary>
+    Task CardsUpdated(IReadOnlyList<EventDto> events, CardsStateDto state);
 }

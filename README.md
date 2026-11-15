@@ -10,7 +10,8 @@ dotnet run --project src/Triviador.Server
 
 Open http://localhost:5080 and press **Play vs bots**. To test matchmaking with real players, open two more
 private/incognito windows (each one is a separate player) and press **Find match** in all three.
-A lone player in the queue gets bots after 12 seconds.
+Nobody gets bots automatically: anyone waiting in a queue can press **Add bots and start** to fill the empty
+seats (set `Game:BotFillAfterSeconds` above 0 to auto-fill after that many seconds instead).
 
 Handy overrides while developing (fast bots, short waits):
 
@@ -19,6 +20,19 @@ dotnet run --project src/Triviador.Server -- --Game:BotSpeedFactor=0.2 --Game:Bo
 ```
 
 On Windows you can also just double-click `run.cmd`.
+
+## Conquest mode
+
+World-map strategy for 2–4 players (bots fill empty seats): resources, buildings, simultaneous turns and
+quiz-powered battles. Rules: [docs/CONQUEST.md](docs/CONQUEST.md). Start it from the lobby with **Conquest vs bots**,
+or choose *Conquest* in a private game. The map is generated from Natural Earth borders by `tools/worldmap`.
+
+## Quiz Cards mode
+
+Uno with questions, for 2–4 players (bots fill empty seats): categories replace colours, and every card you
+play is a multiple-choice question with a 3-second head start before anyone can steal it. Rules and balance
+notes: [docs/CARDS.md](docs/CARDS.md). Start it from the lobby with **Play vs bots**, **Find players** (public queue) or **Invite friends**
+(a private game with a share link, already set to Quiz Cards). The card table fills the window; **F** toggles full screen.
 
 ## Deploy to Azure
 
