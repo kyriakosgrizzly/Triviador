@@ -1,9 +1,34 @@
+using System.Text.Json;
+
 namespace Triviador.Domain.Questions;
 
-/// <summary>A starter bank for local play and bots. Replaced by Cosmos DB in milestone 3.</summary>
+/// <summary>
+/// The built-in question bank: the first questions are written out below, the rest (mc-101 onward,
+/// num-26 onward) live in question-bank.json, embedded in this assembly. Replaced by Cosmos DB in milestone 3.
+/// </summary>
 public static class SampleQuestions
 {
-    public static IReadOnlyList<Question> All { get; } =
+    public static IReadOnlyList<Question> All { get; } = [.. Inline(), .. FromBank()];
+
+    /// <summary>Reads the embedded question-bank.json.</summary>
+    private static IEnumerable<Question> FromBank()
+    {
+        using var stream = typeof(SampleQuestions).Assembly.GetManifestResourceStream("Triviador.QuestionBank.json")
+            ?? throw new InvalidOperationException("question-bank.json is not embedded in Triviador.Domain.");
+        var bank = JsonSerializer.Deserialize<BankFile>(stream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            ?? throw new InvalidOperationException("question-bank.json is empty.");
+
+        foreach (var q in bank.MultipleChoice)
+            yield return new MultipleChoiceQuestion(q.Id, q.Category, q.Text, q.Options, q.Correct);
+        foreach (var q in bank.Numeric)
+            yield return new NumericQuestion(q.Id, q.Category, q.Text, q.Answer, q.Unit);
+    }
+
+    private sealed record BankFile(List<BankChoice> MultipleChoice, List<BankNumber> Numeric);
+    private sealed record BankChoice(string Id, string Category, string Text, List<string> Options, int Correct);
+    private sealed record BankNumber(string Id, string Category, string Text, double Answer, string? Unit);
+
+    private static IReadOnlyList<Question> Inline() =>
     [
         new MultipleChoiceQuestion("mc-01", "Azure", "Which Azure service hosts real-time ASP.NET Core SignalR hubs at scale?",
             ["Azure SignalR Service", "Azure Event Hubs", "Azure Relay", "Azure Queue Storage"], 0),
@@ -92,6 +117,128 @@ public static class SampleQuestions
         new MultipleChoiceQuestion("mc-40", "Azure", "How much storage does the Azure Cosmos DB free tier include?",
             ["5 GB", "25 GB", "100 GB", "1 TB"], 1),
 
+        // More questions (mc-41…mc-100, 15 per Quiz Cards category; num-11…num-25).
+        new MultipleChoiceQuestion("mc-41", "Geography", "What is the capital of Japan?",
+            ["Osaka", "Kyoto", "Tokyo", "Hiroshima"], 2),
+        new MultipleChoiceQuestion("mc-42", "Geography", "Which is the longest river in Africa?",
+            ["Congo", "Niger", "Nile", "Zambezi"], 2),
+        new MultipleChoiceQuestion("mc-43", "Geography", "Which is the largest country by area?",
+            ["Canada", "China", "United States", "Russia"], 3),
+        new MultipleChoiceQuestion("mc-44", "Geography", "What is the capital of Turkey?",
+            ["Istanbul", "Ankara", "Izmir", "Bursa"], 1),
+        new MultipleChoiceQuestion("mc-45", "Geography", "Mount Elbrus is in which mountain range?",
+            ["Alps", "Urals", "Caucasus", "Carpathians"], 2),
+        new MultipleChoiceQuestion("mc-46", "Geography", "Which is the largest lake in the world by area?",
+            ["Lake Superior", "Caspian Sea", "Lake Victoria", "Lake Baikal"], 1),
+        new MultipleChoiceQuestion("mc-47", "Geography", "Which is the deepest lake in the world?",
+            ["Lake Tanganyika", "Lake Baikal", "Lake Superior", "Crater Lake"], 1),
+        new MultipleChoiceQuestion("mc-48", "Geography", "What is the capital of Brazil?",
+            ["Rio de Janeiro", "São Paulo", "Brasília", "Salvador"], 2),
+        new MultipleChoiceQuestion("mc-49", "Geography", "Which river flows through Tbilisi?",
+            ["Rioni", "Mtkvari (Kura)", "Enguri", "Alazani"], 1),
+        new MultipleChoiceQuestion("mc-50", "Geography", "Which ocean lies between Africa and Australia?",
+            ["Atlantic", "Pacific", "Indian", "Southern"], 2),
+        new MultipleChoiceQuestion("mc-51", "Geography", "What is the capital of Egypt?",
+            ["Alexandria", "Cairo", "Luxor", "Giza"], 1),
+        new MultipleChoiceQuestion("mc-52", "Geography", "The Atacama Desert is mostly in which country?",
+            ["Peru", "Argentina", "Chile", "Bolivia"], 2),
+        new MultipleChoiceQuestion("mc-53", "Geography", "Which is the longest continental mountain range?",
+            ["Himalayas", "Rocky Mountains", "Andes", "Urals"], 2),
+        new MultipleChoiceQuestion("mc-54", "Geography", "What is the capital of Norway?",
+            ["Bergen", "Oslo", "Stockholm", "Trondheim"], 1),
+        new MultipleChoiceQuestion("mc-55", "Geography", "The historic city of Timbuktu is in which country?",
+            ["Niger", "Mali", "Chad", "Mauritania"], 1),
+        new MultipleChoiceQuestion("mc-56", "Science", "What is the chemical symbol for sodium?",
+            ["So", "Sd", "Na", "Ns"], 2),
+        new MultipleChoiceQuestion("mc-57", "Science", "Which planet is closest to the Sun?",
+            ["Venus", "Mercury", "Mars", "Earth"], 1),
+        new MultipleChoiceQuestion("mc-58", "Science", "How many pairs of chromosomes do humans usually have?",
+            ["21", "22", "23", "24"], 2),
+        new MultipleChoiceQuestion("mc-59", "Science", "Which gas makes up most of Earth's atmosphere?",
+            ["Oxygen", "Carbon dioxide", "Nitrogen", "Argon"], 2),
+        new MultipleChoiceQuestion("mc-60", "Science", "Who developed the theory of general relativity?",
+            ["Isaac Newton", "Albert Einstein", "Niels Bohr", "Max Planck"], 1),
+        new MultipleChoiceQuestion("mc-61", "Science", "Which particle carries a negative charge?",
+            ["Proton", "Neutron", "Electron", "Photon"], 2),
+        new MultipleChoiceQuestion("mc-62", "Science", "What is the largest organ of the human body?",
+            ["Liver", "Skin", "Brain", "Lungs"], 1),
+        new MultipleChoiceQuestion("mc-63", "Science", "What is the pH of pure water at 25 °C?",
+            ["5", "6", "7", "8"], 2),
+        new MultipleChoiceQuestion("mc-64", "Science", "Which blood type is the universal red-cell donor?",
+            ["A positive", "AB positive", "O negative", "B negative"], 2),
+        new MultipleChoiceQuestion("mc-65", "Science", "Which is the most abundant element in the universe?",
+            ["Helium", "Oxygen", "Hydrogen", "Carbon"], 2),
+        new MultipleChoiceQuestion("mc-66", "Science", "What is the unit of electrical resistance?",
+            ["Volt", "Ampere", "Ohm", "Watt"], 2),
+        new MultipleChoiceQuestion("mc-67", "Science", "Which planet is famous for its bright, wide rings?",
+            ["Jupiter", "Uranus", "Saturn", "Neptune"], 2),
+        new MultipleChoiceQuestion("mc-68", "Science", "Who discovered penicillin?",
+            ["Louis Pasteur", "Alexander Fleming", "Marie Curie", "Robert Koch"], 1),
+        new MultipleChoiceQuestion("mc-69", "Science", "What do bees mainly collect from flowers to make honey?",
+            ["Pollen", "Nectar", "Sap", "Dew"], 1),
+        new MultipleChoiceQuestion("mc-70", "Science", "At what temperature in Fahrenheit does water freeze?",
+            ["0", "32", "100", "212"], 1),
+        new MultipleChoiceQuestion("mc-71", "History", "Who was the first President of the United States?",
+            ["Thomas Jefferson", "John Adams", "George Washington", "Abraham Lincoln"], 2),
+        new MultipleChoiceQuestion("mc-72", "History", "In which year did World War II end?",
+            ["1943", "1944", "1945", "1946"], 2),
+        new MultipleChoiceQuestion("mc-73", "History", "Genghis Khan founded which empire?",
+            ["Ottoman", "Mongol", "Persian", "Mughal"], 1),
+        new MultipleChoiceQuestion("mc-74", "History", "What was the capital of the Byzantine Empire?",
+            ["Rome", "Athens", "Constantinople", "Antioch"], 2),
+        new MultipleChoiceQuestion("mc-75", "Literature", "Who wrote The Knight in the Panther's Skin?",
+            ["Ilia Chavchavadze", "Shota Rustaveli", "Akaki Tsereteli", "Vazha-Pshavela"], 1),
+        new MultipleChoiceQuestion("mc-76", "History", "In which year did Georgia declare its independence from the Soviet Union?",
+            ["1989", "1990", "1991", "1993"], 2),
+        new MultipleChoiceQuestion("mc-77", "History", "Which French emperor was defeated at Waterloo?",
+            ["Louis XIV", "Napoleon Bonaparte", "Charlemagne", "Louis XVI"], 1),
+        new MultipleChoiceQuestion("mc-78", "History", "Which of the Seven Wonders of the Ancient World still stands?",
+            ["Colossus of Rhodes", "Great Pyramid of Giza", "Lighthouse of Alexandria", "Hanging Gardens of Babylon"], 1),
+        new MultipleChoiceQuestion("mc-79", "History", "Who painted the ceiling of the Sistine Chapel?",
+            ["Raphael", "Michelangelo", "Leonardo da Vinci", "Botticelli"], 1),
+        new MultipleChoiceQuestion("mc-80", "History", "Which Georgian king is known as \"the Builder\"?",
+            ["Bagrat III", "David IV", "George V", "Vakhtang I"], 1),
+        new MultipleChoiceQuestion("mc-81", "History", "Who introduced the movable-type printing press to Europe?",
+            ["Johannes Gutenberg", "William Caxton", "Martin Luther", "Galileo Galilei"], 0),
+        new MultipleChoiceQuestion("mc-82", "Music", "Who composed the Moonlight Sonata?",
+            ["Mozart", "Bach", "Beethoven", "Chopin"], 2),
+        new MultipleChoiceQuestion("mc-83", "History", "Which country gave the Statue of Liberty to the United States?",
+            ["United Kingdom", "Spain", "France", "Italy"], 2),
+        new MultipleChoiceQuestion("mc-84", "History", "Which empire captured Constantinople in 1453?",
+            ["Mongol", "Ottoman", "Safavid", "Mamluk"], 1),
+        new MultipleChoiceQuestion("mc-85", "Literature", "Who wrote War and Peace?",
+            ["Fyodor Dostoevsky", "Leo Tolstoy", "Anton Chekhov", "Alexander Pushkin"], 1),
+        new MultipleChoiceQuestion("mc-86", "Web", "What does HTTP stand for?",
+            ["HyperText Transfer Protocol", "High Transfer Text Protocol", "Hyperlink Text Transport Process", "Host Transfer Text Protocol"], 0),
+        new MultipleChoiceQuestion("mc-87", ".NET", "Which company created the C# language?",
+            ["Oracle", "Google", "Microsoft", "Apple"], 2),
+        new MultipleChoiceQuestion("mc-88", "Tech", "What does RAM stand for?",
+            ["Read Access Memory", "Random Access Memory", "Rapid Action Memory", "Run-time Access Module"], 1),
+        new MultipleChoiceQuestion("mc-89", "Web", "Which programming language runs natively in web browsers?",
+            ["Java", "C#", "JavaScript", "Python"], 2),
+        new MultipleChoiceQuestion("mc-90", ".NET", "Which C# keyword declares a value type?",
+            ["class", "struct", "interface", "delegate"], 1),
+        new MultipleChoiceQuestion("mc-91", "Tech", "Which SQL clause filters groups after GROUP BY?",
+            ["WHERE", "HAVING", "ORDER BY", "LIMIT"], 1),
+        new MultipleChoiceQuestion("mc-92", "Web", "Which HTTP status code means \"Internal Server Error\"?",
+            ["400", "404", "500", "503"], 2),
+        new MultipleChoiceQuestion("mc-93", "Tech", "What is binary 1010 in decimal?",
+            ["8", "10", "12", "5"], 1),
+        new MultipleChoiceQuestion("mc-94", "Tech", "Which protocol do mail servers use to send email to each other?",
+            ["FTP", "SMTP", "SSH", "SNMP"], 1),
+        new MultipleChoiceQuestion("mc-95", "Tech", "Who co-founded Microsoft with Bill Gates?",
+            ["Steve Jobs", "Paul Allen", "Steve Wozniak", "Larry Page"], 1),
+        new MultipleChoiceQuestion("mc-96", "Azure", "Which Azure service stores secrets, keys and certificates?",
+            ["Key Vault", "Blob Storage", "Azure Monitor", "Azure DNS"], 0),
+        new MultipleChoiceQuestion("mc-97", "Web", "What does DNS turn into IP addresses?",
+            ["MAC addresses", "Domain names", "File paths", "Email addresses"], 1),
+        new MultipleChoiceQuestion("mc-98", ".NET", "What is Microsoft's own ORM for .NET called?",
+            ["Dapper", "NHibernate", "Entity Framework Core", "LINQ to DB"], 2),
+        new MultipleChoiceQuestion("mc-99", "Tech", "What is the default port of Microsoft SQL Server?",
+            ["1433", "3306", "5432", "27017"], 0),
+        new MultipleChoiceQuestion("mc-100", "Tech", "Which data structure is first-in, first-out (FIFO)?",
+            ["Stack", "Queue", "Tree", "Graph"], 1),
+
         new NumericQuestion("num-01", "History", "In what year did the Berlin Wall fall?", 1989),
         new NumericQuestion("num-02", "Geography", "How tall is Mount Everest?", 8849, "m"),
         new NumericQuestion("num-03", "Science", "How many bones are in the adult human body?", 206),
@@ -102,5 +249,20 @@ public static class SampleQuestions
         new NumericQuestion("num-08", "Sport", "How long is a marathon?", 42.195, "km"),
         new NumericQuestion("num-09", "Music", "How many keys are on a standard piano?", 88),
         new NumericQuestion("num-10", "Azure", "In what year was Windows Azure first announced?", 2008),
+        new NumericQuestion("num-11", "History", "In what year did Columbus first reach the Americas?", 1492),
+        new NumericQuestion("num-12", "Geography", "How many countries are in Africa (UN members)?", 54),
+        new NumericQuestion("num-13", "Science", "At what temperature does water boil at sea level, in °F?", 212, "°F"),
+        new NumericQuestion("num-14", "Geography", "How tall is Mount Elbrus?", 5642, "m"),
+        new NumericQuestion("num-15", "History", "In what year did the French Revolution begin?", 1789),
+        new NumericQuestion("num-16", "Science", "How many planets are in the Solar System?", 8),
+        new NumericQuestion("num-17", "History", "In what year did Constantinople fall to the Ottomans?", 1453),
+        new NumericQuestion("num-18", "Sport", "How many players does a football (soccer) team have on the pitch?", 11),
+        new NumericQuestion("num-19", "Tech", "In what year was the first iPhone released?", 2007),
+        new NumericQuestion("num-20", "Science", "What is the atomic number of carbon?", 6),
+        new NumericQuestion("num-21", "Geography", "How many states does the United States have?", 50),
+        new NumericQuestion("num-22", "History", "In what year were the first modern Olympic Games held?", 1896),
+        new NumericQuestion("num-23", "Science", "The interior angles of a triangle add up to how many degrees?", 180, "°"),
+        new NumericQuestion("num-24", "Music", "How many strings does a standard guitar have?", 6),
+        new NumericQuestion("num-25", "History", "In what year did King David IV win the Battle of Didgori?", 1121),
     ];
 }

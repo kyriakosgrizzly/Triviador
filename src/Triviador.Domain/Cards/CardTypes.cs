@@ -98,7 +98,8 @@ public sealed record CardsOptions
     /// Taking it back makes games drag on — with ~65% right answers hands barely shrink.
     /// </summary>
     public bool WrongAnswerReturnsCard { get; init; }
-    public int StolenDraw { get; init; } = 1;
+    /// <summary>What the owner draws when their card is stolen. 0: nothing — the stealer's discard is the only effect.</summary>
+    public int StolenDraw { get; init; }
     public int NoAnswerDraw { get; init; } = 1;
     public int WrongStealDraw { get; init; } = 2;
     public int PopQuizDraw { get; init; } = 2;

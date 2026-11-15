@@ -11,4 +11,9 @@
     <InternalsVisibleTo Include="Triviador.Domain.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The bulk of the question bank; edit it as plain JSON. Loaded by SampleQuestions. -->
+    <EmbeddedResource Include="Questions\question-bank.json" LogicalName="Triviador.QuestionBank.json" />
+  </ItemGroup>
+
 </Project>

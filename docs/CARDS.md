@@ -17,9 +17,10 @@ Questions come from the multiple-choice bank; `CardDeck.CategoryOf` maps bank ca
 2. The card's question opens with a 10 s timer. For the first **3 s only you** can answer.
    - Right: the card lands and its action happens.
    - Wrong: the card is spent (no action) and you **draw 2**.
-3. After 3 s **anyone** can answer (first click locks in, one try each):
-   - Right steal: your card still counts as played (its action is lost), **you draw 1**,
-     the stealer **discards a random card** and **it becomes their turn**.
+3. After 3 s **anyone** can answer (first click locks in, one try each). Others can **pre-select** during the head start: the answer is locked in and goes in the moment stealing opens, in the order people picked (earliest right one wins). If the owner answers within the head start, pre-selections are dropped with no penalty.
+   - Right steal: your card still counts as played (its action is lost) and **you draw nothing**.
+     The stealer **discards a number card from the colour they hold most of** (ties at random; actions and
+     wilds are kept unless they have no number cards) and **it becomes their turn**.
    - Wrong steal: the stealer **draws 2**; the question stays open.
 4. Nobody right by the deadline: your card comes back and you draw 1.
 5. After each question the right answer stays on screen for 2.5 s (0.8 s after a draw) before the next turn starts; the turn clock starts only then.

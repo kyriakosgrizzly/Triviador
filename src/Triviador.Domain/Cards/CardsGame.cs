@@ -8,8 +8,8 @@ namespace Triviador.Domain.Cards;
 /// On your turn, play a card matching the pile's category (or number, or action), or a wild, or draw one.
 /// The card's question opens with a timer. For the first 3 seconds only you may answer:
 /// right lands the card (and its action), wrong takes it back and draws 2.
-/// After that anyone may answer. A right steal still lands your card (its action is lost), you draw 1,
-/// the stealer discards a random card and it becomes their turn. A wrong steal draws 2.
+/// After that anyone may answer. A right steal still lands your card (its action is lost), the stealer
+/// discards a number card from the colour they hold most of, and it becomes their turn. A wrong steal draws 2.
 /// No answer by the deadline: your card comes back and you draw 1. First empty hand wins.
 /// </summary>
 public sealed class CardsGame
@@ -28,6 +28,10 @@ public sealed class CardsGame
 
     // Open question bookkeeping.
     private readonly Dictionary<PlayerId, (ChoiceAnswer Answer, bool Correct, TimeSpan Elapsed)> _answers = new();
+
+    // Steal answers picked during the owner's head start, in the order they were picked.
+    // They all go in the moment stealing opens; the earliest right one wins.
+    private readonly List<(PlayerId Player, ChoiceAnswer Answer)> _preSelected = [];
     private int _questionSerial;
 
     // Effects waiting for a player's next turn.
@@ -78,8 +82,11 @@ public sealed class CardsGame
     public PlayerId? PendingPopQuizTarget => _pendingPopQuiz?.Target;
     public IReadOnlyList<CardsStanding>? Standings { get; private set; }
 
-    /// <summary>Who has already answered the open question (right or wrong).</summary>
-    public IReadOnlyCollection<PlayerId> Answered => _answers.Keys;
+    /// <summary>Who has already answered the open question (right or wrong), or pre-selected a steal answer.</summary>
+    public IReadOnlyCollection<PlayerId> Answered => _answers.Keys.Concat(_preSelected.Select(p => p.Player)).ToList();
+
+    /// <summary>True if <paramref name="player"/> has a steal answer waiting for the head start to end.</summary>
+    public bool HasPreSelected(PlayerId player) => _preSelected.Any(p => p.Player == player);
 
     public IReadOnlyList<Card> HandOf(PlayerId player) => _hands[player];
     public int HandCount(PlayerId player) => _hands[player].Count;
@@ -208,23 +215,61 @@ public sealed class CardsGame
         Then(Options.DrawPause, Next(player), () => BeginTurn(Next(player)));
     }
 
+    /// <summary>
+    /// Answer the open question. A would-be stealer who answers during the owner's head start
+    /// pre-selects: the answer is locked in and goes in the moment stealing opens.
+    /// </summary>
     public void SubmitAnswer(PlayerId player, Answer answer)
     {
         if (OpenQuestion is not { } q) throw new GameRuleException("There's no question to answer.");
         if (answer is not ChoiceAnswer choice) throw new GameRuleException("Pick one of the options.");
         if (choice.OptionIndex < 0 || choice.OptionIndex >= q.Question.Options.Count) throw new GameRuleException("That option doesn't exist.");
-        if (_answers.ContainsKey(player)) throw new GameRuleException("You've already answered.");
+
+        var now = _time.GetUtcNow();
+        // Pre-selected steals go in before anything that arrives after the head start.
+        if (FlushPreSelected(now)) return; // …and they may have settled the question already
+        if (OpenQuestion is null || OpenQuestion.Serial != q.Serial) throw new GameRuleException("That question is over.");
+
+        if (_answers.ContainsKey(player) || HasPreSelected(player)) throw new GameRuleException("You've already answered.");
         if (!CanAnswer(player))
         {
             if (q.Purpose == CardsPhase.Question && player != q.Owner && !q.Stealable)
                 throw new GameRuleException("Locked out — nobody can steal this one.");
-            if (q.Purpose == CardsPhase.Question && player != q.Owner)
-                throw new GameRuleException("Wait — the owner has a head start.");
+            if (q.Purpose == CardsPhase.Question && player != q.Owner && _hands.ContainsKey(player) && now < q.StealOpensAt)
+            {
+                _preSelected.Add((player, choice));
+                return;
+            }
             throw new GameRuleException("This question isn't yours.");
         }
 
-        var now = _time.GetUtcNow();
         if (now > q.Deadline) throw new GameRuleException("Too late.");
+        Apply(q, player, choice, now);
+    }
+
+    /// <summary>
+    /// Once the head start is over, sends the pre-selected steal answers in the order they were picked.
+    /// Returns true if they settled the question.
+    /// </summary>
+    private bool FlushPreSelected(DateTimeOffset now)
+    {
+        if (OpenQuestion is not { Purpose: CardsPhase.Question } q || _preSelected.Count == 0 || now < q.StealOpensAt)
+            return false;
+
+        var queued = _preSelected.ToList();
+        _preSelected.Clear();
+        foreach (var (player, choice) in queued)
+        {
+            if (OpenQuestion is null || OpenQuestion.Serial != q.Serial) return true;
+            if (_answers.ContainsKey(player)) continue;
+            // They answered "as the head start ended".
+            Apply(q, player, choice, q.StealOpensAt);
+        }
+        return OpenQuestion is null || OpenQuestion.Serial != q.Serial;
+    }
+
+    private void Apply(CardQuestion q, PlayerId player, ChoiceAnswer choice, DateTimeOffset now)
+    {
         var correct = choice.OptionIndex == q.Question.CorrectIndex;
         _answers[player] = (choice, correct, now - q.AskedAt);
 
@@ -261,6 +306,7 @@ public sealed class CardsGame
     public void Tick()
     {
         var now = _time.GetUtcNow();
+        FlushPreSelected(now);
         if (Phase == CardsPhase.Reveal && RevealUntil is { } until && now >= until)
         {
             var next = _afterReveal;
@@ -301,12 +347,10 @@ public sealed class CardsGame
         if (stealer is { } thief)
         {
             // Stolen: the card counts as played but its action is lost.
-            DrawCards(q.Owner, Options.StolenDraw, DrawReason.TooSlow);
-            var hand = _hands[thief];
-            if (hand.Count > 0)
+            if (Options.StolenDraw > 0) DrawCards(q.Owner, Options.StolenDraw, DrawReason.TooSlow);
+            if (StealDiscardFor(thief) is { } dumped)
             {
-                var dumped = hand[_rng.Next(hand.Count)];
-                hand.Remove(dumped);
+                _hands[thief].Remove(dumped);
                 _discard.Insert(Math.Max(0, _discard.Count - 1), dumped); // under the played card
                 Raise(new CardsStealDiscard(thief, dumped));
             }
@@ -348,6 +392,33 @@ public sealed class CardsGame
         DrawCards(q.Owner, Options.WrongAnswerDraw, DrawReason.WrongAnswer);
         var next = Next(q.Owner);
         Then(Options.RevealTime, next, () => BeginTurn(next));
+    }
+
+    /// <summary>
+    /// The card a stealer gets rid of: a number card from the category they hold the most cards of
+    /// (ties broken at random). Without number cards, any coloured card; failing that, any card.
+    /// </summary>
+    private Card? StealDiscardFor(PlayerId stealer)
+    {
+        var hand = _hands[stealer];
+        if (hand.Count == 0) return null;
+
+        var countByCategory = hand.Where(c => c.Category is not null)
+            .GroupBy(c => c.Category!.Value)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        Card? Pick(IEnumerable<Card> candidates)
+        {
+            var list = candidates.ToList();
+            if (list.Count == 0) return null;
+            var best = list.Max(c => countByCategory.GetValueOrDefault(c.Category ?? default));
+            var top = list.Where(c => countByCategory.GetValueOrDefault(c.Category ?? default) == best).ToList();
+            return top[_rng.Next(top.Count)];
+        }
+
+        return Pick(hand.Where(c => c.Kind == CardKind.Number))
+            ?? Pick(hand.Where(c => c.Category is not null))
+            ?? hand[_rng.Next(hand.Count)];
     }
 
     private void ResolveReturned(CardQuestion q, int draw, DrawReason reason)
@@ -408,6 +479,7 @@ public sealed class CardsGame
         Raise(new CardsQuestionResolved(q.Question.Id, q.Question.CorrectAnswerText, q.Question.CorrectIndex, results));
         OpenQuestion = null;
         _answers.Clear();
+        _preSelected.Clear();
     }
 
     // ================================================================== turn flow
@@ -467,6 +539,7 @@ public sealed class CardsGame
     {
         var now = _time.GetUtcNow();
         _answers.Clear();
+        _preSelected.Clear();
         Phase = purpose;
         TurnDeadline = null;
         OpenQuestion = new CardQuestion(
@@ -546,6 +619,7 @@ public sealed class CardsGame
         _afterReveal = null;
         OpenQuestion = null;
         _answers.Clear();
+        _preSelected.Clear();
 
         var order = _players.OrderBy(p => _hands[p.Id].Count).ToList();
         var standings = new List<CardsStanding>();

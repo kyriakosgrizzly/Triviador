@@ -143,7 +143,7 @@ public class CardsGameTests
     }
 
     [Fact]
-    public void Others_cannot_answer_during_the_head_start()
+    public void During_the_head_start_others_pre_select_instead_of_answering()
     {
         var h = new CardsHarness();
         var card = h.Num(CardCategory.Geography, 2);
@@ -151,13 +151,103 @@ public class CardsGameTests
         h.Game.Play(P1, card.Id);
 
         Assert.False(h.Game.CanAnswer(P2));
-        Assert.Throws<GameRuleException>(() => h.Game.SubmitAnswer(P2, CardsHarness.Right));
+        h.Game.SubmitAnswer(P2, CardsHarness.Right); // pre-selected, not applied yet
+        Assert.True(h.Game.HasPreSelected(P2));
+        Assert.Equal(CardsPhase.Question, h.Game.Phase);
+        Assert.Throws<GameRuleException>(() => h.Game.SubmitAnswer(P2, CardsHarness.Wrong)); // locked in
+
         h.PassHeadStart();
-        Assert.True(h.Game.CanAnswer(P2));
+        h.Game.Tick();
+
+        Assert.Equal(P2, h.Game.CurrentPlayer); // the pre-selected steal went in
+        Assert.Equal(1, h.Game.HandCount(P2));  // 2 fillers, one discarded
     }
 
     [Fact]
-    public void Right_steal_lands_the_card_owner_draws_one_stealer_discards_and_takes_the_turn()
+    public void Earliest_pre_selection_wins()
+    {
+        var h = new CardsHarness();
+        var card = h.Num(CardCategory.Geography, 2);
+        h.Start([card, h.Num(CardCategory.Tech, 1)]);
+        h.Game.Play(P1, card.Id);
+
+        h.Game.SubmitAnswer(P3, CardsHarness.Right);
+        h.Clock.Advance(TimeSpan.FromSeconds(1));
+        h.Game.SubmitAnswer(P2, CardsHarness.Right);
+        h.PassHeadStart();
+        h.Game.Tick();
+
+        Assert.Equal(P3, h.Game.CurrentPlayer);
+        Assert.Equal(2, h.Game.HandCount(P2)); // P2's pre-selection never went in: no penalty, no discard
+    }
+
+    [Fact]
+    public void Wrong_pre_selection_draws_two_when_stealing_opens()
+    {
+        var h = new CardsHarness();
+        var card = h.Num(CardCategory.Geography, 2);
+        h.Start([card, h.Num(CardCategory.Tech, 1)]);
+        h.Game.Play(P1, card.Id);
+
+        h.Game.SubmitAnswer(P2, CardsHarness.Wrong);
+        Assert.Equal(2, h.Game.HandCount(P2));
+        h.PassHeadStart();
+        h.Game.Tick();
+
+        Assert.Equal(4, h.Game.HandCount(P2));
+        Assert.Equal(CardsPhase.Question, h.Game.Phase); // still open for others
+    }
+
+    [Fact]
+    public void Owner_answering_in_the_head_start_cancels_pre_selections()
+    {
+        var h = new CardsHarness();
+        var card = h.Num(CardCategory.Geography, 2);
+        h.Start([card, h.Num(CardCategory.Tech, 1)]);
+        h.Game.Play(P1, card.Id);
+
+        h.Game.SubmitAnswer(P2, CardsHarness.Wrong);
+        h.Game.SubmitAnswer(P1, CardsHarness.Right);
+        h.PassHeadStart();
+        h.Game.Tick();
+
+        Assert.Equal(2, h.Game.HandCount(P2)); // no penalty for a pre-selection that never went in
+        Assert.Equal(card, h.Game.TopCard);
+    }
+
+    [Fact]
+    public void Pre_selections_go_in_before_a_late_owner_answer()
+    {
+        var h = new CardsHarness();
+        var card = h.Num(CardCategory.Geography, 2);
+        h.Start([card, h.Num(CardCategory.Tech, 1)]);
+        h.Game.Play(P1, card.Id);
+
+        h.Game.SubmitAnswer(P3, CardsHarness.Right);
+        h.PassHeadStart();
+        // No Tick yet: the owner's answer arrives first, but the pre-selection still counts first.
+        h.Game.SubmitAnswer(P1, CardsHarness.Right);
+
+        Assert.Equal(P3, h.Game.CurrentPlayer);
+        Assert.Equal(1, h.Game.HandCount(P1)); // played one; stolen, but no draw
+    }
+
+    [Fact]
+    public void No_pre_selection_on_a_locked_out_question()
+    {
+        var h = new CardsHarness();
+        var lockout = h.Take(CardKind.Lockout, CardCategory.Geography);
+        var p2Card = h.Num(CardCategory.Geography, 7);
+        h.Start([lockout, h.Num(CardCategory.Tech, 1)], [p2Card]);
+        h.Game.Play(P1, lockout.Id);
+        h.Game.SubmitAnswer(P1, CardsHarness.Right);
+        h.Game.Play(P2, p2Card.Id);
+
+        Assert.Throws<GameRuleException>(() => h.Game.SubmitAnswer(P3, CardsHarness.Right));
+    }
+
+    [Fact]
+    public void Right_steal_lands_the_card_stealer_discards_and_takes_the_turn_owner_draws_nothing()
     {
         var h = new CardsHarness();
         var card = h.Num(CardCategory.Geography, 2);
@@ -168,10 +258,35 @@ public class CardsGameTests
         h.Game.SubmitAnswer(P3, CardsHarness.Right);
 
         Assert.Equal(card, h.Game.TopCard);
-        Assert.Equal(2, h.Game.HandCount(P1)); // played one, drew one
-        Assert.Equal(1, h.Game.HandCount(P3)); // discarded a random one
+        Assert.Equal(1, h.Game.HandCount(P1)); // played one, drew nothing
+        Assert.Equal(1, h.Game.HandCount(P3)); // discarded one
         Assert.Equal(P3, h.Game.CurrentPlayer);
         Assert.Equal(CardsPhase.Turn, h.Game.Phase);
+    }
+
+    [Fact]
+    public void Stealer_discards_a_number_card_from_their_biggest_colour()
+    {
+        var h = new CardsHarness();
+        var card = h.Num(CardCategory.Geography, 2);
+        // P3: three Science (one an action), one Tech number, plus two History fillers.
+        var sciAction = h.Take(CardKind.Lockout, CardCategory.Science);
+        var sci1 = h.Num(CardCategory.Science, 1);
+        var sci2 = h.Num(CardCategory.Science, 2);
+        var tech = h.Num(CardCategory.Tech, 3);
+        var wild = h.Take(CardKind.Duel);
+        h.Start([card, h.Num(CardCategory.Tech, 1)], p3: [sciAction, sci1, sci2, tech, wild]);
+        h.Game.Play(P1, card.Id);
+        h.PassHeadStart();
+
+        h.Game.SubmitAnswer(P3, CardsHarness.Right);
+
+        var hand = h.Game.HandOf(P3);
+        Assert.Equal(6, hand.Count);
+        Assert.Contains(sciAction, hand); // actions and wilds are kept
+        Assert.Contains(wild, hand);
+        Assert.Contains(tech, hand);
+        Assert.True(!hand.Contains(sci1) || !hand.Contains(sci2), "one Science number card should be gone");
     }
 
     [Fact]

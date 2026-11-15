@@ -34,6 +34,14 @@ play is a multiple-choice question with a 3-second head start before anyone can 
 notes: [docs/CARDS.md](docs/CARDS.md). Start it from the lobby with **Play vs bots**, **Find players** (public queue) or **Invite friends**
 (a private game with a share link, already set to Quiz Cards). The card table fills the window; **F** toggles full screen.
 
+## Questions
+
+300 multiple-choice and 55 number questions. The first ones are written out in
+`src/Triviador.Domain/Questions/SampleQuestions.cs`; the rest are in
+`src/Triviador.Domain/Questions/question-bank.json` (one question per line, embedded in the build).
+To add questions, add lines to the JSON with a new unique `id`. Quiz Cards sorts them into its four
+colours by `category` (Geography, Science, Tech/Azure/.NET/Web, everything else → History).
+
 ## Deploy to Azure
 
 See [DEPLOY.md](DEPLOY.md): Azure Container Apps on the free tier, deployed by GitHub Actions

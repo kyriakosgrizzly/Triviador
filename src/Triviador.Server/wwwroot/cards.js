@@ -162,7 +162,7 @@ const Cards = (() => {
         log(`⌛ Nobody answered — ${who(d.owner)} ${verb(d.owner, "take", "takes")} the card back`);
         break;
       case "CardsStealDiscard":
-        log(`${who(d.stealer)} ${verb(d.stealer, "discard", "discards")} a random card (${esc(cardName(d.card))})`);
+        log(`${who(d.stealer)} ${verb(d.stealer, "discard", "discards")} ${esc(cardName(d.card))}`);
         break;
       case "CardsDrew": {
         if (!d.count) break;
@@ -443,7 +443,8 @@ const Cards = (() => {
     const answered = q.answered.includes(playerId) || (picked && picked.serial === q.serial);
     const mine = q.purpose === "Question" ? isMe(q.owner) : isMe(q.owner) || isMe(q.target);
     const waitingHeadStart = q.purpose === "Question" && !mine && t < opens;
-    const canClick = s.canAnswer && !answered && !waitingHeadStart && left > 0;
+    // During the head start, would-be stealers can already pick: it's sent the moment stealing opens.
+    const canClick = s.canAnswer && !answered && left > 0;
 
     for (const b of panel.querySelectorAll(".option")) {
       b.disabled = !canClick;
@@ -451,15 +452,16 @@ const Cards = (() => {
     }
 
     let status;
-    if (answered) status = "Locked in — waiting for the result…";
+    if (answered && waitingHeadStart) status = `<b>Pre-selected</b> — goes in the moment stealing opens (${((opens - t) / 1000).toFixed(1)}s)`;
+    else if (answered) status = "Locked in — waiting for the result…";
     else if (q.purpose === "PopQuiz") status = isMe(q.target) ? `Pop Quiz! Wrong or too slow: draw ${rules.popQuizDraw}.` : "Only they can answer this one.";
     else if (q.purpose === "Duel") status = mine ? `Duel! Wrong — or slower if you're both right — draws ${rules.duelDraw}.` : "Only the duellists answer.";
     else if (mine) status = t < opens
       ? `<b>Head start: ${((opens - t) / 1000).toFixed(1)}s</b> — only you can answer`
       : q.stealable ? "<b>Hurry</b> — anyone can steal it now!" : "🔒 Locked out — nobody can steal this one";
     else if (!q.stealable) status = "🔒 Locked — no steals on this question";
-    else if (waitingHeadStart) status = `Steal opens in <b>${((opens - t) / 1000).toFixed(1)}s</b>…`;
-    else status = `<b>Steal!</b> Right: they draw ${rules.stolenDraw}, you discard 1 and take the turn. Wrong: draw ${rules.wrongStealDraw}.`;
+    else if (waitingHeadStart) status = `Steal opens in <b>${((opens - t) / 1000).toFixed(1)}s</b> — pick now and it goes in the moment it opens`;
+    else status = `<b>Steal!</b> Right: you drop a card from your biggest colour and take the turn. Wrong: draw ${rules.wrongStealDraw}.`;
     const el = panel.querySelector(".k-status");
     if (el.innerHTML !== status) el.innerHTML = status;
   }
