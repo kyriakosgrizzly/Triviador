@@ -7,7 +7,7 @@ namespace Triviador.Domain.Cards;
 ///
 /// On your turn, play a card matching the pile's category (or number, or action), or a wild, or draw one.
 /// The card's question opens with a timer. For the first 3 seconds only you may answer:
-/// right lands the card (and its action), wrong takes it back and draws 2.
+/// right lands the card (and its action), wrong spends it and draws 1.
 /// After that anyone may answer. A right steal still lands your card (its action is lost), the stealer
 /// discards a number card from the colour they hold most of, and it becomes their turn. A wrong steal draws 2.
 /// No answer by the deadline: your card comes back and you draw 1. First empty hand wins.
@@ -42,6 +42,9 @@ public sealed class CardsGame
     // What happens when the reveal pause ends.
     private Action? _afterReveal;
 
+    // A playable card the current player just drew: they may play it or pass.
+    private Card? _drawnCard;
+
     public CardsGame(string id, IReadOnlyList<PlayerInfo> players, ICardQuestionSource questions, TimeProvider time, Random rng, CardsOptions? options = null)
     {
         if (players.Count is < MinPlayers or > MaxPlayers)
@@ -70,6 +73,9 @@ public sealed class CardsGame
 
     public int Turn { get; private set; }
     public DateTimeOffset? TurnDeadline { get; private set; }
+
+    /// <summary>The playable card the current player just drew, while they decide to play it or pass.</summary>
+    public Card? DrawnCard => _drawnCard;
 
     /// <summary>During <see cref="CardsPhase.Reveal"/>: when the next turn starts.</summary>
     public DateTimeOffset? RevealUntil { get; private set; }
@@ -147,7 +153,9 @@ public sealed class CardsGame
     }
 
     public IReadOnlyList<Card> PlayableCards(PlayerId player) =>
-        Phase == CardsPhase.Turn && CurrentPlayer == player ? _hands[player].Where(CanPlay).ToList() : [];
+        Phase != CardsPhase.Turn || CurrentPlayer != player ? []
+        : _drawnCard is { } drawn ? [drawn]
+        : _hands[player].Where(CanPlay).ToList();
 
     /// <summary>True if <paramref name="player"/> may answer the open question right now.</summary>
     public bool CanAnswer(PlayerId player)
@@ -177,10 +185,13 @@ public sealed class CardsGame
         EnsureTurn(player);
         var hand = _hands[player];
         var card = hand.FirstOrDefault(c => c.Id == cardId) ?? throw new GameRuleException("That card isn't in your hand.");
+        if (_drawnCard is { } drawn && drawn.Id != cardId)
+            throw new GameRuleException("You can only play the card you just drew — or pass.");
         if (!CanPlay(card))
             throw new GameRuleException($"That card doesn't match — play {ActiveCategory}, the same number or action, or a wild.");
 
         var questionCategory = card.Category ?? category ?? throw new GameRuleException("Choose a category for your wild card.");
+        _drawnCard = null;
 
         if (card.Kind == CardKind.Duel)
         {
@@ -205,14 +216,46 @@ public sealed class CardsGame
         OpenQuestionFor(CardsPhase.Question, player, null, card, questionCategory, stealable, headStart);
     }
 
-    /// <summary>Draw one card instead of playing. Your turn ends.</summary>
+    /// <summary>
+    /// Draw one card instead of playing. If it fits the pile you may play it straight away (or pass);
+    /// otherwise your turn ends. With <see cref="CardsOptions.LuckyDrawChance"/> the draw favours a card that fits.
+    /// </summary>
     public void Draw(PlayerId player)
     {
         EnsureTurn(player);
-        DrawCards(player, 1, DrawReason.Draw);
+        if (_drawnCard is not null) throw new GameRuleException("Play the card you drew, or pass.");
+
+        var card = TakeForTurnDraw();
+        if (card is not null) _hands[player].Add(card);
+        Raise(new CardsDrew(player, card is null ? 0 : 1, DrawReason.Draw));
+
+        if (card is not null && CanPlay(card))
+        {
+            _drawnCard = card;
+            TurnDeadline = _time.GetUtcNow() + Options.DrawnCardTime;
+            Raise(new CardsDrewPlayable(player));
+            return;
+        }
+
+        EndTurnWithoutPlaying(player);
+    }
+
+    /// <summary>Keep the playable card you just drew and end your turn.</summary>
+    public void Pass(PlayerId player)
+    {
+        EnsureTurn(player);
+        if (_drawnCard is null) throw new GameRuleException("You can only pass after drawing a card you could play.");
+        Raise(new CardsPassed(player));
+        EndTurnWithoutPlaying(player);
+    }
+
+    private void EndTurnWithoutPlaying(PlayerId player)
+    {
+        _drawnCard = null;
         // Lockout / Hot Seat only protect or expose the turn they were aimed at.
         ClearTurnEffects(player);
-        Then(Options.DrawPause, Next(player), () => BeginTurn(Next(player)));
+        var next = Next(player);
+        Then(Options.DrawPause, next, () => BeginTurn(next));
     }
 
     /// <summary>
@@ -329,9 +372,9 @@ public sealed class CardsGame
 
         if (Phase == CardsPhase.Turn && TurnDeadline is { } deadline && now >= deadline && CurrentPlayer is { } p)
         {
-            DrawCards(p, 1, DrawReason.TurnTimeout);
-            ClearTurnEffects(p);
-            Then(Options.DrawPause, Next(p), () => BeginTurn(Next(p)));
+            // Out of time after drawing a playable card: keep it and pass. Otherwise draw one as a penalty.
+            if (_drawnCard is null) DrawCards(p, 1, DrawReason.TurnTimeout);
+            EndTurnWithoutPlaying(p);
         }
     }
 
@@ -525,6 +568,7 @@ public sealed class CardsGame
 
     private void StartTurn(PlayerId player)
     {
+        _drawnCard = null;
         Phase = CardsPhase.Turn;
         CurrentPlayer = player;
         TurnDeadline = _time.GetUtcNow() + Options.TurnTime;
@@ -583,18 +627,41 @@ public sealed class CardsGame
         Raise(new CardsDrew(player, drawn, reason));
     }
 
+    /// <summary>
+    /// The card for a voluntary draw: usually (<see cref="CardsOptions.LuckyDrawChance"/>) one that fits the pile,
+    /// preferring coloured cards over wilds, so a player with nothing to play isn't stuck drawing turn after turn.
+    /// </summary>
+    private Card? TakeForTurnDraw()
+    {
+        RefillPileIfEmpty();
+        if (_drawPile.Count > 0 && _rng.NextDouble() < Options.LuckyDrawChance)
+        {
+            var fits = _drawPile.Where(c => !c.IsWild && CanPlay(c)).ToList();
+            if (fits.Count == 0) fits = _drawPile.Where(CanPlay).ToList();
+            if (fits.Count > 0)
+            {
+                var card = fits[_rng.Next(fits.Count)];
+                _drawPile.Remove(card);
+                return card;
+            }
+        }
+        return TakeFromPile();
+    }
+
+    /// <summary>When the draw pile runs out, reshuffle everything under the top card into it.</summary>
+    private void RefillPileIfEmpty()
+    {
+        if (_drawPile.Count > 0 || _discard.Count <= 1) return;
+        var top = _discard[^1];
+        _drawPile.AddRange(_discard.Take(_discard.Count - 1));
+        _discard.Clear();
+        _discard.Add(top);
+        _rng.Shuffle(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_drawPile));
+    }
+
     private Card? TakeFromPile()
     {
-        if (_drawPile.Count == 0 && _discard.Count > 1)
-        {
-            // Reshuffle everything under the top card.
-            var top = _discard[^1];
-            _drawPile.AddRange(_discard.Take(_discard.Count - 1));
-            _discard.Clear();
-            _discard.Add(top);
-            _rng.Shuffle(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_drawPile));
-        }
-
+        RefillPileIfEmpty(); // reshuffles everything under the top card
         if (_drawPile.Count == 0) return null;
         var card = _drawPile[^1];
         _drawPile.RemoveAt(_drawPile.Count - 1);
@@ -617,6 +684,7 @@ public sealed class CardsGame
         TurnDeadline = null;
         RevealUntil = null;
         _afterReveal = null;
+        _drawnCard = null;
         OpenQuestion = null;
         _answers.Clear();
         _preSelected.Clear();

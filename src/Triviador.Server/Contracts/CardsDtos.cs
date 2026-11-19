@@ -21,7 +21,8 @@ public sealed record CardsRulesDto(
     int MaxTurns,
     IReadOnlyList<CardCategory> Categories,
     double RevealSeconds,
-    double DrawPauseSeconds);
+    double DrawPauseSeconds,
+    double DrawnCardSeconds);
 
 public sealed record CardsPlayerDto(
     PlayerId Id,
@@ -62,6 +63,7 @@ public sealed record CardsStateDto(
     int DrawPile,
     IReadOnlyList<Card> Hand,
     IReadOnlyList<int> Playable,
+    int? DrawnCardId,
     CardsQuestionDto? Question,
     bool CanAnswer,
     PlayerId? PendingPopQuiz,

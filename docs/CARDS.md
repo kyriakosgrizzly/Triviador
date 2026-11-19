@@ -1,6 +1,7 @@
 # Quiz Cards
 
-Uno with questions. 2–4 players, bots fill empty seats. Play vs bots, **Find players** (public queue, "Add bots and start" fills empty seats) or **Invite friends** (private game with a link). Engine: `src/Triviador.Domain/Cards/`,
+Uno with questions — and, since 2026-11-19, the only game players can start (Quick match and Conquest are
+still in the code but not reachable). 2–4 players, bots fill empty seats. Play vs bots, **Find players** (public queue, "Add bots and start" fills empty seats) or **Invite friends** (private game with a link). Engine: `src/Triviador.Domain/Cards/`,
 host: `src/Triviador.Server/Rooms/CardsRoom.cs`, client: `src/Triviador.Server/wwwroot/cards.js`.
 
 ## Deck (104 cards)
@@ -13,10 +14,14 @@ Questions come from the multiple-choice bank; `CardDeck.CategoryOf` maps bank ca
 ## A turn
 
 1. Play a card that matches the pile's **category**, its **number** (or the same action), or a wild — or draw 1.
-   Doing nothing for 20 s draws 1 for you.
+   - **Lucky draw:** two times in three, the drawn card is one that fits the pile (a coloured card if there is one),
+     so a player with nothing to play isn't stuck drawing turn after turn. Penalty draws are never helped.
+   - **Play it straight away:** if the drawn card fits, you may play it at once (it's the only card you may play)
+     or **pass** to keep it. You get 10 s to decide; running out keeps it with no penalty.
+   - Doing nothing for 20 s draws 1 for you as a penalty.
 2. The card's question opens with a 10 s timer. For the first **3 s only you** can answer.
    - Right: the card lands and its action happens.
-   - Wrong: the card is spent (no action) and you **draw 2**.
+   - Wrong: the card is spent (no action) and you **draw 1** (was 2 until 2026-11-20), so your hand stays the same size.
 3. After 3 s **anyone** can answer (first click locks in, one try each). Others can **pre-select** during the head start: the answer is locked in and goes in the moment stealing opens, in the order people picked (earliest right one wins). If the owner answers within the head start, pre-selections are dropped with no penalty.
    - Right steal: your card still counts as played (its action is lost) and **you draw nothing**.
      The stealer **discards a number card from the colour they hold most of** (ties at random; actions and
@@ -39,7 +44,7 @@ First empty hand wins (a steal discard can win too). After 120 turns, fewest car
 
 ## Balance notes
 
-Everything is in `CardsOptions` (draw counts, timers, `HeadStart`, `RevealTime`, `DrawPause`, `MaxTurns`, `WrongAnswerReturnsCard`).
+Everything is in `CardsOptions` (draw counts, timers, `HeadStart`, `RevealTime`, `DrawPause`, `LuckyDrawChance`, `DrawnCardTime`, `MaxTurns`, `WrongAnswerReturnsCard`).
 Bot simulations (3 players, 150 games each, turns until someone empties their hand):
 
 | Players answer right | Wrong answer draws 2 | Wrong answer draws 1 |
@@ -58,3 +63,16 @@ Client → server: `PlayCardsVsBots(players)`, `FindCardsMatch()` (public queue:
 `AnswerChoice(index)`, `LeaveMatch()`, and `SetPrivateGameMode("cards", seats)` in private games.
 Server → client: `CardsJoined(rules, state)`, `CardsUpdated(events, state)`. Each player's state contains only
 their own hand; the open question never contains its answer.
+
+### 2026-11-19: drawing changes
+
+Bot games, 120 per row, median turns to finish / share of games that hit the 120-turn cap:
+
+| Players get right | Before | Play drawn card + lucky draw | …and wrong answer draws 1 |
+|---|---|---|---|
+| 65%, 3 players | 121 / 68% | 121 / 56% | 50 / 7% |
+| 80%, 3 players | 61 / 17% | 48 / 3% | 34 / 0% |
+
+Lucky draws help when players know their stuff; when they don't, the "wrong answer draws 2" rule is what makes
+hands grow (a wrong answer is +1 card overall). **Applied on 2026-11-20: `WrongAnswerDraw` is now 1.**
+

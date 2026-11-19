@@ -811,3 +811,42 @@ body.is-fullscreen #cards .topbar { padding-top: 8px; padding-bottom: 8px; }
 @media (prefers-reduced-motion: reduce) {
   .k-card.k-enter, .k-hand .k-card.k-new, .k-question.k-pop, .p-score.k-bump, .k-question .r-list li { animation: none; }
 }
+
+/* Nothing fits: the Draw button and the deck pulse so it's obvious what to do. */
+@keyframes k-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 185, 66, .7); }
+  50% { box-shadow: 0 0 0 10px rgba(245, 185, 66, 0); }
+}
+#k-draw.k-pulse { animation: k-pulse 1.2s ease-in-out infinite; }
+.k-pile.k-pulse .k-card { animation: k-pulse 1.2s ease-in-out infinite; outline-style: solid; }
+@media (prefers-reduced-motion: reduce) {
+  #k-draw.k-pulse, .k-pile.k-pulse .k-card { animation: none; outline: 3px solid var(--gold); }
+}
+
+/* ---------- Wild chooser: a centred pop-up so it's never squeezed or clipped ---------- */
+.k-chooser {
+  position: fixed;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, 94vw);
+  max-height: 90vh;
+  overflow: auto;
+  z-index: 60;
+  padding: 22px;
+  border: 1px solid var(--gold);
+  background: #141a26;
+  box-shadow: 0 0 0 100vmax rgba(5, 8, 14, .6), 0 20px 50px rgba(0, 0, 0, .6);
+  animation: k-pop .2s ease-out;
+}
+.k-chooser-head { margin-bottom: 14px; }
+.k-chooser-title { font-family: Cinzel, Georgia, serif; font-size: 22px; font-weight: 700; color: var(--gold); }
+.k-chooser-tip { color: #c3c9d6; font-size: 14px; margin-top: 4px; }
+.k-step { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 10px 0 8px; }
+.k-chooser .k-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 6px; }
+.k-chooser .k-choice { --cat: #3a4358; justify-content: flex-start; text-align: left; padding: 12px 14px; font-size: 15px; border: 2px solid color-mix(in srgb, var(--cat) 55%, transparent); }
+.k-chooser .k-choice.opp { --cat: #6b7590; }
+.k-chooser .k-choice:hover { border-color: var(--cat); }
+.k-chooser .k-choice.on { border-color: var(--gold); background: color-mix(in srgb, var(--cat) 35%, #141a26); box-shadow: 0 0 0 2px var(--gold); color: #fff; }
+.k-chooser .private-actions { margin-top: 16px; display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+.k-chooser #k-confirm:disabled { opacity: .55; }
+.k-muted { color: var(--muted); font-weight: 400; }

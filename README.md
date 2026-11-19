@@ -1,6 +1,10 @@
-# Triviador
+# Quiz Cards (Triviador)
 
-A 3-player, map-based ranked quiz game (Triviador-style), built on Azure free tiers as AI-200 practice.
+Uno with questions, built on Azure free tiers as AI-200 practice. Match the colour, answer the card's question to
+play it, steal when others are slow. Rules: [docs/CARDS.md](docs/CARDS.md).
+
+The repo started as a Triviador-style map game; its Quick match and Conquest modes are still in the code
+(`Domain/Matches`, `Domain/Conquest`) but the app only offers Quiz Cards now.
 
 ## Run it
 
@@ -8,10 +12,10 @@ A 3-player, map-based ranked quiz game (Triviador-style), built on Azure free ti
 dotnet run --project src/Triviador.Server
 ```
 
-Open http://localhost:5080 and press **Play vs bots**. To test matchmaking with real players, open two more
-private/incognito windows (each one is a separate player) and press **Find match** in all three.
-Nobody gets bots automatically: anyone waiting in a queue can press **Add bots and start** to fill the empty
-seats (set `Game:BotFillAfterSeconds` above 0 to auto-fill after that many seconds instead).
+Open http://localhost:5080 and press **Play vs bots**. To test with real players, open more private/incognito
+windows (each one is a separate player) and press **Find players** in each, or use **Invite friends**.
+Nobody gets bots automatically: anyone waiting can press **Add bots and start** to fill the empty seats
+(set `Game:BotFillAfterSeconds` above 0 to auto-fill after that many seconds instead).
 
 Handy overrides while developing (fast bots, short waits):
 

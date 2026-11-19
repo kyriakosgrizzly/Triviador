@@ -524,8 +524,7 @@ function renderQueue(q) {
   if (!q.searching) { box.hidden = true; setLobbyBusy(false); return; }
   box.hidden = false;
   setLobbyBusy(true);
-  const what = q.mode === "cards" ? "Quiz Cards" : "Quick match";
-  $("#queue-text").textContent = `${what}: searching… ${q.playersWaiting}/${q.seats || 3} players`;
+  $("#queue-text").textContent = `Searching… ${q.playersWaiting}/${q.seats || 4} players`;
   const addBots = $("#btn-add-bots");
   if (q.secondsUntilBots >= 0) {
     // Server configured to fill with bots automatically.
@@ -543,16 +542,11 @@ function renderQueue(q) {
 }
 
 function setLobbyBusy(busy) {
-  $("#btn-bots").disabled = busy;
-  $("#btn-find").disabled = busy;
-  $("#btn-invite").disabled = busy;
-  $("#btn-conquest").disabled = busy;
   $("#btn-cards").disabled = busy;
   $("#btn-cards-find").disabled = busy;
   $("#btn-cards-invite").disabled = busy;
 }
 
-let conquestSeats = 3;
 let cardsSeats = 3;
 
 // ------------------------------------------------------------------ private games
@@ -593,21 +587,14 @@ function renderPrivate() {
   for (let i = lobby.players.length; i < lobby.maxPlayers; i++) rows.push('<li class="empty">Waiting for a friend… (or a bot)</li>');
   $("#private-players").innerHTML = rows.join("");
 
-  const conquest = lobby.mode === "conquest";
-  const flexible = conquest || lobby.mode === "cards";
-  for (const b of document.querySelectorAll("#private-mode .mode-btn")) {
-    b.classList.toggle("on", b.dataset.mode === lobby.mode);
-    b.disabled = !amHost;
-  }
-  $("#private-seats").hidden = !flexible;
+  $("#private-seats").hidden = false;
   for (const b of document.querySelectorAll("#private-seats .seat")) {
     const n = Number(b.dataset.seats);
     b.classList.toggle("on", n === lobby.maxPlayers);
     b.disabled = !amHost || n < lobby.players.length;
   }
   $("#private-mode").hidden = !amHost;
-  const modeName = { quick: "Quick match", conquest: "Conquest", cards: "Quiz Cards" }[lobby.mode] || "Quick match";
-  $("#private-mode-label").textContent = amHost ? "" : `${modeName} · ${lobby.maxPlayers} players`;
+  $("#private-mode-label").textContent = amHost ? "" : `Quiz Cards · ${lobby.maxPlayers} players`;
 
   const empty = lobby.maxPlayers - lobby.players.length;
   $("#btn-start").hidden = !amHost;
@@ -663,18 +650,7 @@ async function start() {
   const nameInput = $("#name-input");
   nameInput.value = store.get("triviador.name") || `Player-${playerId.slice(0, 4)}`;
 
-  $("#btn-bots").onclick = () => act("PlayVsBots");
-  $("#btn-find").onclick = () => act("FindMatch");
   $("#btn-cancel").onclick = () => invoke("CancelSearch");
-
-  $("#btn-invite").onclick = () => act("CreatePrivateGame");
-  $("#btn-conquest").onclick = () => act("PlayConquestVsBots", conquestSeats);
-  for (const b of document.querySelectorAll("#mode-conquest .seat")) {
-    b.onclick = () => {
-      conquestSeats = Number(b.dataset.seats);
-      for (const x of document.querySelectorAll("#mode-conquest .seat")) x.classList.toggle("on", x === b);
-    };
-  }
   $("#btn-cards").onclick = () => act("PlayCardsVsBots", cardsSeats);
   $("#btn-cards-find").onclick = () => act("FindCardsMatch");
   $("#btn-cards-invite").onclick = () => act("CreatePrivateGameFor", "cards", cardsSeats);
@@ -685,15 +661,11 @@ async function start() {
       for (const x of document.querySelectorAll("#mode-cards .seat")) x.classList.toggle("on", x === b);
     };
   }
-  for (const b of document.querySelectorAll("#private-mode .mode-btn")) {
-    b.onclick = () => invoke("SetPrivateGameMode", b.dataset.mode, lobby ? Math.max(lobby.players.length, 3) : 3);
-  }
   for (const b of document.querySelectorAll("#private-seats .seat")) {
-    b.onclick = () => invoke("SetPrivateGameMode", lobby ? lobby.mode : "conquest", Number(b.dataset.seats));
+    b.onclick = () => invoke("SetPrivateGameMode", "cards", Number(b.dataset.seats));
   }
   Conquest.wire();
   Cards.wire();
-  Conquest.loadWorld().catch(() => {});
   $("#btn-join-invite").onclick = async () => {
     const code = inviteCode;
     try {

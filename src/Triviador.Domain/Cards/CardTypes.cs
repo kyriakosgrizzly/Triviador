@@ -91,7 +91,17 @@ public sealed record CardsOptions
     /// <summary>How long a player may think before the game draws a card for them.</summary>
     public TimeSpan TurnTime { get; init; } = TimeSpan.FromSeconds(20);
 
-    public int WrongAnswerDraw { get; init; } = 2;
+    /// <summary>After drawing a playable card: how long to decide between playing it and passing.</summary>
+    public TimeSpan DrawnCardTime { get; init; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// Chance that a card drawn on your turn is one you can play (if the pile has one), instead of the top card.
+    /// 0 = plain Uno draws. Penalty draws are never helped.
+    /// </summary>
+    public double LuckyDrawChance { get; init; } = 0.67;
+
+    /// <summary>What the owner draws for a wrong answer (the card is spent too, so the hand stays the same size).</summary>
+    public int WrongAnswerDraw { get; init; } = 1;
 
     /// <summary>
     /// False: a wrong answer still discards the card (without its action). True: it goes back to your hand.
@@ -106,7 +116,7 @@ public sealed record CardsOptions
     public int DuelDraw { get; init; } = 4;
 
     /// <summary>
-    /// Game length cap: after this many turns, fewest cards wins. With "wrong answer draws 2", hands
+    /// Game length cap: after this many turns, fewest cards wins. Back when a wrong answer drew 2, hands
     /// only shrink reliably when players get ~80% right, so without a cap games can drag on.
     /// </summary>
     public int MaxTurns { get; init; } = 120;
@@ -157,6 +167,12 @@ public sealed record CardsCardReturned(PlayerId Owner, Card Card) : CardsEvent;
 public sealed record CardsStealDiscard(PlayerId Stealer, Card Card) : CardsEvent;
 
 public sealed record CardsLockout(PlayerId Player) : CardsEvent;
+
+/// <summary>The card the player just drew fits the pile: they may play it now or pass.</summary>
+public sealed record CardsDrewPlayable(PlayerId Player) : CardsEvent;
+
+/// <summary>The player kept the playable card they drew and ended their turn.</summary>
+public sealed record CardsPassed(PlayerId Player) : CardsEvent;
 
 public sealed record CardsReversed(int Direction, PlayerId HotSeat) : CardsEvent;
 

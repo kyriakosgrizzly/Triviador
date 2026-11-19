@@ -87,6 +87,9 @@ const Cards = (() => {
   function apply(state) {
     s = state;
     clockOffset = Date.parse(state.serverNow) - Date.now();
+    // Once a new turn starts, the last question's result is history. Without this, the short pause after
+    // a draw (also the "Reveal" phase) showed that old question again.
+    if (s.phase === "Turn") reveal = null;
     if (choosing && (s.phase !== "Turn" || s.currentPlayer !== playerId || !s.hand.some((c) => c.id === choosing.card.id))) choosing = null;
     render();
   }
@@ -173,6 +176,12 @@ const Cards = (() => {
         log(`${who(d.player)} ${verb(d.player, "draw", "draws")} ${d.count}${why}`);
         break;
       }
+      case "CardsDrewPlayable":
+        log(`${who(d.player)} ${verb(d.player, "draw", "draws")} a card that fits`);
+        break;
+      case "CardsPassed":
+        log(`${who(d.player)} ${verb(d.player, "keep", "keeps")} it and ${verb(d.player, "pass", "passes")}`);
+        break;
       case "CardsLockout":
         log(`🔒 ${poss(d.player)} next question can't be stolen`);
         break;
@@ -222,6 +231,8 @@ const Cards = (() => {
     else if (q && q.purpose === "Duel") text = `Duel: ${who(q.owner)} vs ${who(q.target)}`;
     else if (q) text = isMe(q.owner) ? `<span class="you">Answer to land your card!</span>` : `${who(q.owner)} is answering… steal after ${rules.headStartSeconds}s`;
     else if (s.phase === "Reveal") text = isMe(s.currentPlayer) ? `<span class="you">You're up next…</span>` : `Up next: ${who(s.currentPlayer)}`;
+    else if (isMe(s.currentPlayer) && s.drawnCardId != null) text = `<span class="you">You drew a card that fits</span> — play it now or pass`;
+    else if (isMe(s.currentPlayer) && s.phase === "Turn" && s.playable.length === 0) text = `<span class="you">Your turn</span> — nothing fits, draw a card`;
     else if (isMe(s.currentPlayer)) text = `<span class="you">Your turn</span> — play a card or draw`;
     else text = `${who(s.currentPlayer)} is choosing a card…`;
     $("#k-banner").innerHTML = text;
@@ -261,8 +272,17 @@ const Cards = (() => {
     $("#k-dir").title = s.direction > 0 ? "Clockwise (seat order)" : "Reversed";
     const pile = $("#k-pile");
     pile.querySelector(".k-count").textContent = s.drawPile;
-    pile.classList.toggle("can", myTurn);
-    $("#k-draw").disabled = !myTurn;
+    const drewPlayable = myTurn && s.drawnCardId != null;
+    // Nothing in your hand fits: drawing is the only move, so the button and the deck light up.
+    const mustDraw = myTurn && !drewPlayable && s.playable.length === 0;
+    pile.classList.toggle("can", myTurn && !drewPlayable);
+    pile.classList.toggle("k-pulse", mustDraw);
+    // After drawing a card that fits, the button becomes "Pass" (keep it, end the turn).
+    const btn = $("#k-draw");
+    btn.disabled = !myTurn;
+    btn.textContent = drewPlayable ? "Pass (keep it)" : "Draw a card";
+    btn.classList.toggle("primary", drewPlayable || mustDraw);
+    btn.classList.toggle("k-pulse", mustDraw);
   }
 
   function renderQuestion() {
@@ -377,26 +397,46 @@ const Cards = (() => {
     const c = choosing;
     const duel = c.card.kind === "Duel";
     const opponents = s.players.filter((p) => !isMe(p.id));
+    if (duel && opponents.length === 1) c.opponent = opponents[0].id; // only one choice: pick it for them
+
+    const ready = c.category && (!duel || c.opponent);
+    const oppName = c.opponent ? (player(c.opponent) || { name: "?" }).name : "";
+    const label = !c.category ? "Pick a colour first"
+      : duel && !c.opponent ? "Pick who to duel"
+      : duel ? `⚔ Duel ${oppName} in ${c.category}` : `Play — ${c.category}`;
+
     box.innerHTML = `
-      <div class="panel-title">${esc(KIND[c.card.kind].name)} — ${esc(KIND[c.card.kind].tip)}</div>
+      <div class="k-chooser-head">
+        <div class="k-chooser-title">${KIND[c.card.kind].sym} ${esc(KIND[c.card.kind].name)}</div>
+        <div class="k-chooser-tip">${esc(KIND[c.card.kind].tip)}</div>
+      </div>
+      <div class="k-step">${duel ? "1. " : ""}Pick a colour${duel ? " (the question's topic)" : ""}</div>
       <div class="k-choices">${Object.keys(CAT).map((k) =>
-        `<button class="btn small k-choice ${c.category === k ? "on" : ""}" data-cat="${k}" style="--cat:${CAT[k].color}">${CAT[k].icon} ${k}</button>`).join("")}</div>
-      ${duel ? `<div class="k-choices">${opponents.map((p) =>
-        `<button class="btn small k-choice ${c.opponent === p.id ? "on" : ""}" data-opp="${esc(p.id)}">⚔ ${esc(p.name)} · ${p.cards}</button>`).join("")}</div>` : ""}
+        `<button class="btn k-choice ${c.category === k ? "on" : ""}" data-cat="${k}" style="--cat:${CAT[k].color}">${c.category === k ? "✓ " : ""}${CAT[k].icon} ${k}</button>`).join("")}</div>
+      ${duel ? `<div class="k-step">2. Pick who to duel</div>
+      <div class="k-choices">${opponents.map((p) =>
+        `<button class="btn k-choice opp ${c.opponent === p.id ? "on" : ""}" data-opp="${esc(p.id)}">${c.opponent === p.id ? "✓ " : "⚔ "}${esc(p.name)} <span class="k-muted">· ${p.cards} card${p.cards === 1 ? "" : "s"}</span></button>`).join("")}</div>` : ""}
       <div class="private-actions">
-        <button class="btn primary" id="k-confirm" ${c.category && (!duel || c.opponent) ? "" : "disabled"}>Play</button>
+        <button class="btn primary" id="k-confirm" ${ready ? "" : "disabled"}>${esc(label)}</button>
         <button class="btn ghost" id="k-cancel">Cancel</button>
       </div>`;
-    for (const b of box.querySelectorAll("[data-cat]")) b.onclick = () => { c.category = b.dataset.cat; renderChooser(); };
-    for (const b of box.querySelectorAll("[data-opp]")) b.onclick = () => { c.opponent = b.dataset.opp; renderChooser(); };
-    box.querySelector("#k-cancel").onclick = () => { choosing = null; renderHand(); };
-    box.querySelector("#k-confirm").onclick = () => {
+
+    const play = () => {
       const { card, category, opponent } = c;
       choosing = null;
       invoke("CardsPlay", card.id, category, duel ? opponent : null);
       renderHand();
     };
+    for (const b of box.querySelectorAll("[data-cat]")) b.onclick = () => {
+      c.category = b.dataset.cat;
+      // Pick Your Topic needs nothing else: one click plays it.
+      if (!duel) play(); else renderChooser();
+    };
+    for (const b of box.querySelectorAll("[data-opp]")) b.onclick = () => { c.opponent = b.dataset.opp; renderChooser(); };
+    box.querySelector("#k-cancel").onclick = () => { choosing = null; renderHand(); };
+    box.querySelector("#k-confirm").onclick = () => { if (ready) play(); };
   }
+
 
   function renderFinished() {
     const box = $("#k-finished");
@@ -424,7 +464,8 @@ const Cards = (() => {
     const clock = $("#k-clock-bar");
     if (s.phase === "Turn" && s.turnDeadline) {
       const left = Math.max(0, Date.parse(s.turnDeadline) - t);
-      clock.style.transform = `scaleX(${Math.min(1, left / (rules.turnSeconds * 1000))})`;
+      const full = (s.drawnCardId != null ? rules.drawnCardSeconds : rules.turnSeconds) * 1000;
+      clock.style.transform = `scaleX(${Math.min(1, left / full)})`;
       clock.parentElement.classList.toggle("low", left < 5000);
     } else {
       clock.style.transform = "scaleX(0)";
@@ -474,8 +515,8 @@ const Cards = (() => {
   // ================================================================== wiring
 
   function wire() {
-    $("#k-draw").onclick = () => invoke("CardsDraw");
-    $("#k-pile").onclick = () => { if (s && s.phase === "Turn" && isMe(s.currentPlayer)) invoke("CardsDraw"); };
+    $("#k-draw").onclick = () => invoke(s && s.drawnCardId != null ? "CardsPass" : "CardsDraw");
+    $("#k-pile").onclick = () => { if (s && s.phase === "Turn" && isMe(s.currentPlayer) && s.drawnCardId == null) invoke("CardsDraw"); };
     $("#k-leave").onclick = () => { $("#k-confirm-leave").hidden = false; };
     $("#k-stay").onclick = () => { $("#k-confirm-leave").hidden = true; };
     $("#k-confirm-leave-btn").onclick = () => { invoke("LeaveMatch"); reset(); goToLobby(); };
@@ -486,6 +527,7 @@ const Cards = (() => {
     // Keyboard: F toggles full screen, 1–4 answer the open question.
     document.addEventListener("keydown", (e) => {
       if (!active || !s || e.target.tagName === "INPUT") return;
+      if (e.key === "Escape" && choosing) { choosing = null; renderHand(); return; }
       if (e.key === "f" || e.key === "F") { toggleFullscreen(); return; }
       if (!s.question) return;
       const i = Number(e.key) - 1;

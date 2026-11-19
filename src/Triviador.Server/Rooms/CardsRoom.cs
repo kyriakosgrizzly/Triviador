@@ -200,6 +200,7 @@ public sealed class CardsRoom : IGameRoom
             Game.DrawPileCount,
             seated ? Game.HandOf(viewer).ToList() : [],
             seated ? Game.PlayableCards(viewer).Select(c => c.Id).ToList() : [],
+            seated && Game.CurrentPlayer == viewer ? Game.DrawnCard?.Id : null,
             question,
             // Can answer now, or will be able to once the head start ends (the browser shows a countdown).
             seated && q is not null && !Game.Answered.Contains(viewer)
@@ -223,7 +224,8 @@ public sealed class CardsRoom : IGameRoom
         o.MaxTurns,
         Enum.GetValues<CardCategory>(),
         o.RevealTime.TotalSeconds,
-        o.DrawPause.TotalSeconds);
+        o.DrawPause.TotalSeconds,
+        o.DrawnCardTime.TotalSeconds);
 
     private async Task Locked(Func<Task> action)
     {

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Triviador</title>
+  <title>Quiz Cards</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -13,8 +13,8 @@
   <!-- Lobby -->
   <section id="lobby" class="screen">
     <div class="lobby-card">
-      <h1 class="logo">Triviador</h1>
-      <p class="tagline">Answer fast. Answer close. Take the valley.</p>
+      <h1 class="logo">Quiz Cards</h1>
+      <p class="tagline">Match the colour. Answer to play. Steal when they're slow.</p>
 
       <label class="field">
         <span>Your name</span>
@@ -32,27 +32,10 @@
       </div>
 
       <div id="lobby-actions" class="lobby-actions">
-        <button id="btn-bots" class="btn primary">Play vs bots</button>
-        <button id="btn-find" class="btn">Find match</button>
-        <button id="btn-invite" class="btn wide">Invite friends</button>
-
-        <div id="mode-conquest" class="mode-card wide">
-          <div>
-            <div class="mode-title">Conquest</div>
-            <div class="mode-sub">World map · resources · buildings · armies</div>
-          </div>
-          <div class="seat-picker" role="group" aria-label="Players">
-            <button class="seat" data-seats="2">2</button>
-            <button class="seat on" data-seats="3">3</button>
-            <button class="seat" data-seats="4">4</button>
-          </div>
-          <button id="btn-conquest" class="btn primary">Conquest vs bots</button>
-        </div>
-
         <div id="mode-cards" class="mode-card cards wide">
           <div>
-            <div class="mode-title">Quiz Cards <span class="new">NEW</span></div>
-            <div class="mode-sub">Uno with questions · match the category · steal answers</div>
+            <div class="mode-title">Players at the table</div>
+            <div class="mode-sub">Bots fill any empty seats</div>
           </div>
           <div class="seat-picker" role="group" aria-label="Players">
             <button class="seat" data-seats="2">2</button>
@@ -82,11 +65,6 @@
           <button id="btn-share" class="btn small" hidden>Share</button>
         </div>
         <div id="private-mode" class="private-mode">
-          <div class="mode-toggle" role="group" aria-label="Game mode">
-            <button class="mode-btn" data-mode="quick">Quick match</button>
-            <button class="mode-btn" data-mode="conquest">Conquest</button>
-            <button class="mode-btn" data-mode="cards">Quiz Cards</button>
-          </div>
           <div id="private-seats" class="seat-picker" role="group" aria-label="Seats">
             <button class="seat" data-seats="2">2</button>
             <button class="seat" data-seats="3">3</button>
@@ -115,11 +93,12 @@
       <details class="rules">
         <summary>How to play</summary>
         <ol>
-          <li><b>Castles.</b> Each player places a castle (3 hit points).</li>
-          <li><b>Expansion.</b> Everyone guesses a number. Closest claims 2 territories, runner-up claims 1. Repeat until the map is full.</li>
-          <li><b>Battle.</b> Take turns attacking a neighbouring enemy territory. You and the defender get the same question; if you both get it right (or both wrong), a closest-guess tiebreak decides.</li>
-          <li><b>Castles fall</b> after 3 successful attacks, and their owner's land goes to the attacker.</li>
-          <li>Most land value after 4 battle rounds wins.</li>
+          <li><b>Match the pile.</b> Play a card of the same colour (Geography, Science, History, Tech), the same number or the same action — or a wild.</li>
+          <li><b>Answer to play it.</b> Every card is a question. You get a 3-second head start; right lands the card, wrong spends it and you draw 1.</li>
+          <li><b>Steal.</b> After 3 seconds anyone can answer. A right steal lets you drop a card from your biggest colour and take the turn; a wrong one draws 2.</li>
+          <li><b>Can't play?</b> Draw a card. If it fits, you can play it straight away.</li>
+          <li><b>Action cards:</b> Lockout (no steals next turn), Hot Seat (reverse, no head start), Pop Quiz (next player answers or draws 2), Pick Your Topic and Duel (wilds).</li>
+          <li>First to empty their hand wins.</li>
         </ol>
       </details>
 
@@ -284,7 +263,7 @@
             <li><b>?! Pop Quiz</b> — next player answers first; wrong draws 2.</li>
             <li><b>◆ Pick Your Topic</b> — wild: choose the category.</li>
             <li><b>⚔ Duel</b> — wild: you vs an opponent, loser draws 4.</li>
-            <li>Wrong answer: card is spent, you draw 2. Nobody answers: card comes back, draw 1.</li>
+            <li>Wrong answer: card is spent, you draw 1. Nobody answers: card comes back, draw 1.</li>
             <li>Right steal: you drop a number card from your biggest colour and take the turn. Wrong steal: draw 2.</li>
             <li>Stealing: pick during the 3-second head start and your answer goes in the moment it ends.</li>
             <li>Keys <b>1–4</b> answer, <b>F</b> full screen.</li>

@@ -47,22 +47,8 @@ public sealed class GameHub(
     }
 
     // ------------------------------------------------------------------ starting a game
-
-    public async Task PlayVsBots()
-    {
-        EnsureNotInMatch();
-        await matchmaker.LeaveAsync(MeId);
-        await lobbies.LeaveAsync(MeId);
-        var room = registry.Create([Me], botCount: 2);
-        await room.StartAsync();
-    }
-
-    public async Task FindMatch()
-    {
-        EnsureNotInMatch();
-        await lobbies.LeaveAsync(MeId);
-        await matchmaker.JoinAsync(Me);
-    }
+    // Quiz Cards is the only game players can start. The Quick match and Conquest engines are still in the
+    // code base (Domain/Matches, Domain/Conquest, MatchRoom, ConquestRoom) but nothing here starts them.
 
     /// <summary>Queue for a public Quiz Cards game: starts at once with 4 players, otherwise bots fill up after a short wait.</summary>
     public async Task FindCardsMatch()
@@ -77,16 +63,6 @@ public sealed class GameHub(
     /// <summary>Anyone waiting in a public queue: start now with everyone who's there, bots in the empty seats.</summary>
     public Task StartQueueWithBots() => matchmaker.StartWithBotsAsync(MeId);
 
-    /// <summary>Start Conquest against bots. <paramref name="players"/> is the total, you included (2–4).</summary>
-    public async Task PlayConquestVsBots(int players)
-    {
-        EnsureNotInMatch();
-        await matchmaker.LeaveAsync(MeId);
-        await lobbies.LeaveAsync(MeId);
-        var room = registry.CreateConquest([Me], Math.Clamp(players, ConquestGame.MinPlayers, ConquestGame.MaxPlayers));
-        await room.StartAsync();
-    }
-
     /// <summary>Start Quiz Cards against bots. <paramref name="players"/> is the total, you included (2–4).</summary>
     public async Task PlayCardsVsBots(int players)
     {
@@ -97,19 +73,21 @@ public sealed class GameHub(
         await room.StartAsync();
     }
 
-    /// <summary>Create a private game. Returns its code; the browser turns it into a share link.</summary>
+    /// <summary>Create a private Quiz Cards game for 3. Returns its code; the browser turns it into a share link.</summary>
     public async Task<string> CreatePrivateGame()
     {
         EnsureNotInMatch();
         await matchmaker.LeaveAsync(MeId);
-        return await lobbies.CreateAsync(Me);
+        var code = await lobbies.CreateAsync(Me);
+        await lobbies.SetModeAsync(MeId, LobbyModes.Cards, 3);
+        return code;
     }
 
-    /// <summary>Create a private game already set to a mode ("quick", "conquest", "cards") and table size.</summary>
+    /// <summary>Create a private Quiz Cards game for <paramref name="seats"/> players (2–4). <paramref name="mode"/> is ignored: cards only.</summary>
     public async Task<string> CreatePrivateGameFor(string mode, int seats)
     {
         var code = await CreatePrivateGame();
-        await lobbies.SetModeAsync(MeId, mode, seats);
+        await lobbies.SetModeAsync(MeId, LobbyModes.Cards, seats);
         return code;
     }
 
@@ -124,8 +102,8 @@ public sealed class GameHub(
 
     public Task StartPrivateGame() => lobbies.StartAsync(MeId);
 
-    /// <summary>Host only: "quick" (3 seats), or "conquest" / "cards" with 2–4 seats.</summary>
-    public Task SetPrivateGameMode(string mode, int seats) => lobbies.SetModeAsync(MeId, mode, seats);
+    /// <summary>Host only: change the table size (2–4). Quiz Cards is the only mode now, whatever <paramref name="mode"/> says.</summary>
+    public Task SetPrivateGameMode(string mode, int seats) => lobbies.SetModeAsync(MeId, LobbyModes.Cards, seats);
 
     /// <summary>Quit the current match. A bot takes over your seat; if nobody human is left, the match ends.</summary>
     public async Task LeaveMatch()
@@ -164,6 +142,9 @@ public sealed class GameHub(
         PlayCards(g => g.Play(MeId, cardId, category, string.IsNullOrEmpty(opponent) ? null : new PlayerId(opponent)));
 
     public Task CardsDraw() => PlayCards(g => g.Draw(MeId));
+
+    /// <summary>After drawing a card you could play: keep it and end your turn.</summary>
+    public Task CardsPass() => PlayCards(g => g.Pass(MeId));
 
     private async Task PlayCards(Action<CardsGame> command)
     {

@@ -29,7 +29,7 @@ public sealed class CardsHarness
         var infos = new[] { P1, P2, P3 }.Take(players).Select(p => new PlayerInfo(p, p.Value)).ToList();
         // No reveal pauses by default, so tests can check the next turn right after an answer.
         Game = new CardsGame("k1", infos, new FixedCardQuestions(), Clock, new Random(3),
-            options ?? new CardsOptions { RevealTime = TimeSpan.Zero, DrawPause = TimeSpan.Zero });
+            options ?? new CardsOptions { RevealTime = TimeSpan.Zero, DrawPause = TimeSpan.Zero, LuckyDrawChance = 0 });
     }
 
     /// <summary>Takes a not-yet-used card from a fresh deck.</summary>
@@ -112,7 +112,7 @@ public class CardsGameTests
     }
 
     [Fact]
-    public void Wrong_answer_spends_the_card_without_its_action_and_draws_two()
+    public void Wrong_answer_spends_the_card_without_its_action_and_draws_one()
     {
         var h = new CardsHarness();
         var quiz = h.Take(CardKind.PopQuiz, CardCategory.Geography);
@@ -121,7 +121,7 @@ public class CardsGameTests
         h.Game.Play(P1, quiz.Id);
         h.Game.SubmitAnswer(P1, CardsHarness.Wrong);
 
-        Assert.Equal(3, h.Game.HandCount(P1)); // 2 - 1 + 2
+        Assert.Equal(2, h.Game.HandCount(P1)); // 2 - 1 + 1
         Assert.Equal(quiz, h.Game.TopCard);
         Assert.Null(h.Game.PendingPopQuizTarget);
         Assert.Equal(CardsPhase.Turn, h.Game.Phase);
@@ -138,7 +138,7 @@ public class CardsGameTests
         h.Game.Play(P1, card.Id);
         h.Game.SubmitAnswer(P1, CardsHarness.Wrong);
 
-        Assert.Equal(4, h.Game.HandCount(P1));
+        Assert.Equal(3, h.Game.HandCount(P1)); // card back + 1 drawn
         Assert.Contains(card, h.Game.HandOf(P1));
     }
 
@@ -338,13 +338,93 @@ public class CardsGameTests
     }
 
     [Fact]
-    public void Drawing_ends_the_turn()
+    public void Drawing_a_card_that_does_not_fit_ends_the_turn()
     {
         var h = new CardsHarness();
         h.Start([h.Num(CardCategory.Tech, 1)]);
         h.Game.Draw(P1);
         Assert.Equal(2, h.Game.HandCount(P1));
+        if (h.Game.DrawnCard is null) Assert.Equal(P2, h.Game.CurrentPlayer);
+        else Assert.Equal(P1, h.Game.CurrentPlayer); // it happened to fit: P1 may play it
+    }
+
+    private static CardsHarness LuckyHarness() =>
+        new(options: new CardsOptions { RevealTime = TimeSpan.Zero, DrawPause = TimeSpan.Zero, LuckyDrawChance = 1 });
+
+    [Fact]
+    public void Lucky_draw_gives_a_card_that_fits_and_it_can_be_played_straight_away()
+    {
+        var h = LuckyHarness();
+        h.Start([h.Num(CardCategory.Tech, 1)]);
+
+        h.Game.Draw(P1);
+
+        var drawn = h.Game.DrawnCard;
+        Assert.NotNull(drawn);
+        Assert.False(drawn!.IsWild); // coloured cards first
+        Assert.True(h.Game.CanPlay(drawn));
+        Assert.Equal(P1, h.Game.CurrentPlayer);
+        Assert.Equal(CardsPhase.Turn, h.Game.Phase);
+        Assert.Equal([drawn.Id], h.Game.PlayableCards(P1).Select(c => c.Id).ToList());
+
+        h.Game.Play(P1, drawn.Id, drawn.Category is null ? CardCategory.Science : null,
+            drawn.Kind == CardKind.Duel ? P2 : null);
+        Assert.NotNull(h.Game.OpenQuestion);
+        Assert.Null(h.Game.DrawnCard);
+    }
+
+    [Fact]
+    public void After_drawing_a_playable_card_only_that_card_can_be_played()
+    {
+        var h = LuckyHarness();
+        var other = h.Num(CardCategory.Geography, 3); // also fits, but wasn't the drawn card
+        h.Start([other, h.Num(CardCategory.Tech, 1)]);
+
+        // P1 could play, but draws anyway.
+        h.Game.Draw(P1);
+        Assert.Throws<GameRuleException>(() => h.Game.Play(P1, other.Id));
+        Assert.Throws<GameRuleException>(() => h.Game.Draw(P1)); // no second draw
+    }
+
+    [Fact]
+    public void Passing_keeps_the_drawn_card_and_ends_the_turn()
+    {
+        var h = LuckyHarness();
+        h.Start([h.Num(CardCategory.Tech, 1)]);
+        Assert.Throws<GameRuleException>(() => h.Game.Pass(P1)); // nothing drawn yet
+
+        h.Game.Draw(P1);
+        var drawn = h.Game.DrawnCard!;
+        h.Game.Pass(P1);
+
+        Assert.Contains(drawn, h.Game.HandOf(P1));
+        Assert.Equal(2, h.Game.HandCount(P1));
         Assert.Equal(P2, h.Game.CurrentPlayer);
+        Assert.Null(h.Game.DrawnCard);
+    }
+
+    [Fact]
+    public void Running_out_of_time_after_drawing_a_playable_card_passes_without_a_penalty()
+    {
+        var h = LuckyHarness();
+        h.Start([h.Num(CardCategory.Tech, 1)]);
+        h.Game.Draw(P1);
+
+        h.Clock.Advance(h.Game.Options.DrawnCardTime);
+        h.Game.Tick();
+
+        Assert.Equal(2, h.Game.HandCount(P1)); // no extra card
+        Assert.Equal(P2, h.Game.CurrentPlayer);
+    }
+
+    [Fact]
+    public void Plain_draws_take_the_top_card_when_luck_is_off()
+    {
+        var h = new CardsHarness(); // LuckyDrawChance = 0
+        h.Start([h.Num(CardCategory.Tech, 1)]);
+        var before = h.Game.DrawPileCount;
+        h.Game.Draw(P1);
+        Assert.Equal(before - 1, h.Game.DrawPileCount);
     }
 
     [Fact]
