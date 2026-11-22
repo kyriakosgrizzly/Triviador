@@ -6,13 +6,17 @@
 // What keeps it free:
 //   - Consumption plan, 0.25 vCPU / 0.5 GiB, scales to ZERO when nobody is connected.
 //   - Max 1 replica: matches live in server memory, so a second replica would split players.
-//   - Log Analytics capped at 0.1 GB/day (~3 GB/month, under the 5 GB free allowance).
+//   - Log Analytics capped at 0.1 GB/day (~3 GB/month, under the 5 GB free allowance). Application Insights
+//     stores its data in the same workspace, so the same cap covers it: on a busy day telemetry just stops
+//     until midnight UTC instead of costing money.
 //   - Image comes from GitHub Container Registry, so no Azure Container Registry (which has no free tier).
 //   - Questions live in Azure Cosmos DB for NoSQL on the FREE TIER (first 1000 RU/s + 25 GB free). The
 //     database shares 400 RU/s across its containers and the account is capped at 1000 RU/s, so it can't
 //     be billed past the free allowance even by mistake. Only ONE free-tier account is allowed per
 //     subscription: if you already have one, deploy with cosmosFreeTier=false (then 400 RU/s costs ~$23/month).
 //   - The app signs in to Cosmos with its managed identity (no keys anywhere); key auth is switched off.
+//   - Optional "Sign in with Google" uses Container Apps' built-in authentication (free). It switches on
+//     only when googleClientId and googleClientSecret are given; guests can always play without signing in.
 
 @description('Short name used for every resource.')
 param name string = 'triviador'
@@ -36,7 +40,17 @@ param cosmosFreeTier bool = true
 @description('Optional: your own Microsoft Entra object id (az ad signed-in-user show --query id -o tsv), so you can browse and edit questions in Data Explorer or run the server locally against Azure.')
 param cosmosAdminPrincipalId string = ''
 
+@description('Optional: OAuth client id from Google Cloud Console (APIs & Services → Credentials). Empty = no Google sign-in.')
+param googleClientId string = ''
+
+@description('Optional: the matching Google OAuth client secret.')
+@secure()
+param googleClientSecret string = ''
+
 var usePrivateRegistry = !empty(registryUsername) && !empty(registryPassword)
+var useGoogleSignIn = !empty(googleClientId) && !empty(googleClientSecret)
+// Container Apps auth reads the Google client secret from this app secret.
+var googleSecretName = 'google-provider-authentication-secret'
 
 // Cosmos account names are global DNS names: lowercase, 3–44 characters.
 var cosmosAccountName = 'cosmos-${name}-${uniqueString(resourceGroup().id)}'
@@ -57,6 +71,20 @@ resource logs 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
     workspaceCapping: {
       dailyQuotaGb: json('0.1')
     }
+  }
+}
+
+// Application Insights (workspace-based): requests, exceptions, logs, Cosmos DB calls and the game's
+// own metrics, sent by the server with OpenTelemetry (Azure Monitor distro).
+resource insights 'Microsoft.Insights/components@2020-02-02' = {
+  name: 'appi-${name}'
+  location: location
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    WorkspaceResourceId: logs.id
+    IngestionMode: 'LogAnalytics'
+    RetentionInDays: 30
   }
 }
 
@@ -169,12 +197,22 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
         transport: 'auto' // HTTP/1.1 + WebSockets for SignalR
         allowInsecure: false
       }
-      secrets: usePrivateRegistry ? [
+      secrets: concat(usePrivateRegistry ? [
         {
           name: 'registry-password'
           value: registryPassword
         }
-      ] : []
+      ] : [], [
+        {
+          name: 'appinsights-connection-string'
+          value: insights.properties.ConnectionString
+        }
+      ], useGoogleSignIn ? [
+        {
+          name: googleSecretName
+          value: googleClientSecret
+        }
+      ] : [])
       registries: usePrivateRegistry ? [
         {
           server: 'ghcr.io'
@@ -196,6 +234,21 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'ASPNETCORE_ENVIRONMENT'
               value: 'Production'
+            }
+            {
+              // Turns on OpenTelemetry → Application Insights in Program.cs.
+              name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+              secretRef: 'appinsights-connection-string'
+            }
+            {
+              // Name shown for this app in Application Map and the cloud_RoleName column.
+              name: 'OTEL_SERVICE_NAME'
+              value: name
+            }
+            {
+              // Trust the sign-in headers only when the platform's auth proxy is really in front of the app.
+              name: 'Auth__EasyAuth'
+              value: string(useGoogleSignIn)
             }
             {
               name: 'Cosmos__Endpoint'
@@ -241,6 +294,45 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
+// "Sign in with Google": Container Apps' built-in authentication (often called Easy Auth). It runs in front
+// of the app, handles /.auth/login/google, /.auth/logout and /.auth/me, keeps the session in a cookie and
+// passes the signed-in user to the app in X-MS-CLIENT-PRINCIPAL headers. AllowAnonymous keeps the game
+// open to guests; the app decides what needs a login.
+resource auth 'Microsoft.App/containerApps/authConfigs@2024-03-01' = if (useGoogleSignIn) {
+  parent: app
+  name: 'current'
+  properties: {
+    platform: {
+      enabled: true
+    }
+    globalValidation: {
+      unauthenticatedClientAction: 'AllowAnonymous'
+    }
+    identityProviders: {
+      google: {
+        enabled: true
+        registration: {
+          clientId: googleClientId
+          clientSecretSettingName: googleSecretName
+        }
+        login: {
+          scopes: [
+            'openid'
+            'profile'
+            'email'
+          ]
+        }
+      }
+    }
+    login: {
+      preserveUrlFragmentsForLogins: false
+    }
+    httpSettings: {
+      requireHttps: true
+    }
+  }
+}
+
 // Let the app read and write question documents. On a first deployment this can take a few minutes to
 // take effect; the server keeps playing the embedded questions and retries until it works.
 resource appCosmosAccess 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-11-15' = {
@@ -268,3 +360,6 @@ output url string = 'https://${app.properties.configuration.ingress.fqdn}'
 
 @description('Cosmos DB endpoint holding the questions.')
 output cosmosEndpoint string = cosmos.properties.documentEndpoint
+
+@description('Paste this into Google Cloud Console as the OAuth client\'s "Authorized redirect URI".')
+output googleRedirectUri string = 'https://${app.properties.configuration.ingress.fqdn}/.auth/login/google/callback'

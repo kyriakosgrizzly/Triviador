@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
+using Triviador.Server.Auth;
 using Triviador.Domain;
 using Triviador.Domain.Cards;
 using Triviador.Domain.Conquest;
@@ -16,7 +17,8 @@ public sealed class GameHub(
     MatchRegistry registry,
     Matchmaker matchmaker,
     LobbyRegistry lobbies,
-    ConnectionTracker connections) : Hub<IGameClient>
+    ConnectionTracker connections,
+    PlayerIdentity identity) : Hub<IGameClient>
 {
     private const string NameKey = "name";
 
@@ -28,8 +30,8 @@ public sealed class GameHub(
             return;
         }
 
-        var name = Context.GetHttpContext()?.Request.Query["name"].ToString().Trim() ?? "";
-        Context.Items[NameKey] = string.IsNullOrEmpty(name) ? "Player" : name[..Math.Min(name.Length, 20)];
+        // Signed-in players play under their Google name; guests under the name they typed.
+        Context.Items[NameKey] = identity.ForConnection(Context.GetHttpContext())?.Name ?? "Player";
         connections.Connected(MeId);
 
         // Reconnect: put the player straight back into their running match.

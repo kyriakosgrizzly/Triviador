@@ -1,23 +1,14 @@
-using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.SignalR;
+using Triviador.Server.Auth;
 
 namespace Triviador.Server.Hubs;
 
 /// <summary>
-/// Dev-only identity: the browser generates a player id, keeps it in localStorage and sends it
-/// in the query string. Anyone can claim any id, so this is replaced by Entra External ID
-/// (a real signed-in user) before ranked play matters.
+/// Tells SignalR who is on a connection: a Google-signed-in player (from the token /api/me issued) or a
+/// guest (the random id the browser keeps in localStorage). See <see cref="PlayerIdentity"/>.
 /// </summary>
-public sealed partial class PlayerIdProvider : IUserIdProvider
+public sealed class PlayerIdProvider(PlayerIdentity identity) : IUserIdProvider
 {
-    public string? GetUserId(HubConnectionContext connection)
-    {
-        var id = connection.GetHttpContext()?.Request.Query["playerId"].ToString();
-        return IsValid(id) ? id : null;
-    }
-
-    public static bool IsValid(string? id) => !string.IsNullOrEmpty(id) && ValidId().IsMatch(id);
-
-    [GeneratedRegex("^[A-Za-z0-9-]{8,64}$")]
-    private static partial Regex ValidId();
+    public string? GetUserId(HubConnectionContext connection) =>
+        identity.ForConnection(connection.GetHttpContext())?.Id;
 }

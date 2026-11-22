@@ -26,6 +26,8 @@
     <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.61.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
+    <!-- Application Insights via OpenTelemetry (the Azure Monitor distro). -->
+    <PackageReference Include="Azure.Monitor.OpenTelemetry.AspNetCore" Version="1.6.0" />
   </ItemGroup>
 
   <ItemGroup>

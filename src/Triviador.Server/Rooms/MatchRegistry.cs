@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Triviador.Domain;
 using Triviador.Domain.Questions;
 using Triviador.Server.Hubs;
+using Triviador.Server.Telemetry;
 
 namespace Triviador.Server.Rooms;
 
@@ -16,6 +17,7 @@ public sealed class MatchRegistry(
     TimeProvider time,
     IOptions<GameOptions> options,
     QuestionCatalog questions,
+    GameMetrics metrics,
     ILogger<MatchRegistry> logger)
 {
     private static readonly string[] BotNames = ["Nino", "Giorgi", "Tamar", "Levan", "Ana", "Dato", "Mariam", "Luka"];
@@ -46,7 +48,7 @@ public sealed class MatchRegistry(
     public CardsRoom CreateCards(IReadOnlyList<PlayerInfo> humans, int seats)
     {
         var (seated, accuracy) = Seat(humans, Math.Max(0, seats - humans.Count));
-        var room = new CardsRoom(NewId(), seated, accuracy, questions.All, hub, time, options.Value, new Random(_rng.Next()));
+        var room = new CardsRoom(NewId(), seated, accuracy, questions.All, hub, time, options.Value, metrics, new Random(_rng.Next()));
         return Register(room, humans, seated, "Cards");
     }
 

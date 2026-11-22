@@ -59,7 +59,7 @@ per colour. It never returns answers.
 | **Indexing only `/category` and `/type`** | The server reads everything in one query, so indexing text and options would only make writes cost more RUs. |
 | **Session consistency** | The default: you read your own writes, at lower cost than Strong. |
 | **Managed identity + `disableLocalAuth: true`** | No keys or connection strings anywhere. The app gets the built-in **Cosmos DB Built-in Data Contributor** role (`…0002`). That is a *data-plane* role assignment on the account (`sqlRoleAssignments`), not an IAM role. Data-plane tokens can't create databases or containers, so Bicep creates those. |
-| **Load once, keep in memory** | Each game would otherwise query per question. Loading about 860 documents costs a few hundred RUs every 30 minutes, a tiny fraction of the free 1000 RU/s. |
+| **Load once, keep in memory** | Each game would otherwise query per question. Loading all 864 documents measured **14.2 RUs** in Azure (logged on every load), every 30 minutes — next to nothing against 400 RU/s. |
 
 ## Looking at the data in the portal
 

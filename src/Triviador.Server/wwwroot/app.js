@@ -9,8 +9,8 @@ const store = {
   set(key, value) { try { localStorage.setItem(key, value); } catch { /* private mode */ } },
 };
 
-// Dev identity: a random id kept per browser. Open a private window to be a different player.
-const playerId = (() => {
+// Guest identity: a random id kept per browser. Open a private window to be a different player.
+const guestId = (() => {
   let id = store.get("triviador.playerId");
   if (!id || !/^[A-Za-z0-9-]{8,64}$/.test(id)) {
     id = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now());
@@ -18,6 +18,49 @@ const playerId = (() => {
   }
   return id;
 })();
+
+// Signed in with Google (Azure Container Apps authentication)? Filled in by loadMe() before connecting.
+let me = { authEnabled: false, signedIn: false };
+let playerId = guestId;
+
+async function loadMe() {
+  try {
+    const res = await fetch("/api/me", { credentials: "same-origin", cache: "no-store" });
+    if (res.ok) me = await res.json();
+  } catch { /* server unreachable: play as a guest */ }
+  playerId = me.signedIn ? me.playerId : guestId;
+  return me;
+}
+
+/** A fresh game token for every (re)connect; tokens are short-lived and die with a server restart. */
+async function gameToken() {
+  const fresh = await loadMe();
+  if (!fresh.signedIn) { location.reload(); return ""; } // Google session ended: start over as a guest
+  return fresh.token;
+}
+
+function signInUrl() {
+  return `/.auth/login/google?post_login_redirect_uri=${encodeURIComponent(location.pathname + location.search)}`;
+}
+
+function renderAccount() {
+  const box = $("#account");
+  const nameInput = $("#name-input");
+  if (me.signedIn) {
+    box.hidden = false;
+    box.innerHTML = `<span class="acct-who">Signed in as <b>${esc(me.name)}</b>${me.email ? ` <span class="acct-mail">${esc(me.email)}</span>` : ""}</span>
+      <a class="acct-link" href="/.auth/logout?post_logout_redirect_uri=${encodeURIComponent(location.pathname)}">Sign out</a>`;
+    nameInput.value = me.name;
+    nameInput.readOnly = true;
+    nameInput.title = "Your Google name. Sign out to play under another name.";
+  } else if (me.authEnabled) {
+    box.hidden = false;
+    box.innerHTML = `<a class="btn google" href="${signInUrl()}">Sign in with Google</a>
+      <span class="acct-note">or just type a name and play as a guest</span>`;
+  } else {
+    box.hidden = true;
+  }
+}
 
 // ------------------------------------------------------------------ state
 
@@ -57,9 +100,10 @@ async function connect(name) {
   if (conn) { try { await conn.stop(); } catch { /* ignore */ } }
 
   connectedName = name;
-  const url = `${HUB_URL}?playerId=${encodeURIComponent(playerId)}&name=${encodeURIComponent(name)}`;
+  // Guests are known by guestId + name; signed-in players by the token (the server ignores the rest for them).
+  const url = `${HUB_URL}?playerId=${encodeURIComponent(guestId)}&name=${encodeURIComponent(name)}`;
   conn = new signalR.HubConnectionBuilder()
-    .withUrl(url)
+    .withUrl(url, me.signedIn ? { accessTokenFactory: gameToken } : {})
     .withAutomaticReconnect()
     .build();
 
@@ -631,7 +675,7 @@ function goToLobby() {
 
 function currentName() {
   const name = $("#name-input").value.trim().slice(0, 20) || "Player";
-  store.set("triviador.name", name);
+  if (!me.signedIn) store.set("triviador.name", name);
   return name;
 }
 
@@ -648,7 +692,9 @@ async function act(method, ...args) {
 
 async function start() {
   const nameInput = $("#name-input");
-  nameInput.value = store.get("triviador.name") || `Player-${playerId.slice(0, 4)}`;
+  nameInput.value = store.get("triviador.name") || `Player-${guestId.slice(0, 4)}`;
+  await loadMe();
+  renderAccount();
 
   $("#btn-cancel").onclick = () => invoke("CancelSearch");
   $("#btn-cards").onclick = () => act("PlayCardsVsBots", cardsSeats);

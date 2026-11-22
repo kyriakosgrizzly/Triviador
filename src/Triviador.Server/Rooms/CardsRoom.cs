@@ -4,6 +4,7 @@ using Triviador.Domain.Cards;
 using Triviador.Domain.Questions;
 using Triviador.Server.Contracts;
 using Triviador.Server.Hubs;
+using Triviador.Server.Telemetry;
 
 namespace Triviador.Server.Rooms;
 
@@ -20,6 +21,8 @@ public sealed class CardsRoom : IGameRoom
     private readonly TimeProvider _time;
     private readonly GameOptions _options;
     private readonly Random _rng;
+    private readonly GameMetrics _metrics;
+    private DateTimeOffset _startedAt;
 
     private readonly Dictionary<PlayerId, CardsBot> _bots;
     private readonly Dictionary<PlayerId, CardsBot> _standIns;
@@ -36,8 +39,10 @@ public sealed class CardsRoom : IGameRoom
         IHubContext<GameHub, IGameClient> hub,
         TimeProvider time,
         GameOptions options,
+        GameMetrics metrics,
         Random rng)
     {
+        _metrics = metrics;
         _hub = hub;
         _time = time;
         _options = options;
@@ -63,6 +68,8 @@ public sealed class CardsRoom : IGameRoom
     {
         Game.Start();
         Game.DequeueEvents(); // the opening is covered by the joined state
+        _startedAt = _time.GetUtcNow();
+        _metrics.GameStarted(Humans.Count, Game.Players.Count);
         foreach (var h in ConnectedHumans)
             await _hub.Clients.User(h.Value).CardsJoined(Rules, BuildState(h));
     });
@@ -89,6 +96,7 @@ public sealed class CardsRoom : IGameRoom
         if (_left.Count == Humans.Count)
         {
             FinishedAt = _time.GetUtcNow(); // nobody human left
+            _metrics.GameAbandoned();
             return;
         }
 
@@ -163,8 +171,30 @@ public sealed class CardsRoom : IGameRoom
     {
         var events = Game.DequeueEvents();
         if (events.Count == 0) return;
+        Measure(events);
         if (Game.Phase == CardsPhase.Finished) FinishedAt ??= _time.GetUtcNow();
         await BroadcastAsync(events.Select(e => new EventDto(e.GetType().Name, e)).ToList());
+    }
+
+    private void Measure(IEnumerable<CardsEvent> events)
+    {
+        foreach (var e in events)
+        {
+            switch (e)
+            {
+                case CardsCardLanded landed:
+                    _metrics.QuestionResolved(landed.Category, landed.StolenBy is not null ? "stolen" : landed.Fizzled ? "wrong" : "right");
+                    break;
+                case CardsCardReturned returned:
+                    _metrics.QuestionResolved(returned.Card.Category ?? Game.ActiveCategory, "timeout");
+                    break;
+                case CardsFinished finished:
+                    var winner = finished.Standings.FirstOrDefault(s => s.Place == 1)?.Player;
+                    var humanWon = winner is { } w && Game.Players.Any(p => p.Id == w && !p.IsBot);
+                    _metrics.GameFinished(humanWon, Game.Turn, _time.GetUtcNow() - _startedAt);
+                    break;
+            }
+        }
     }
 
     private async Task BroadcastAsync(IReadOnlyList<EventDto> events)

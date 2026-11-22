@@ -95,6 +95,18 @@ button { font: inherit; }
   outline: none;
 }
 .field input:focus { border-color: var(--gold); }
+.field input[readonly] { color: var(--muted); cursor: default; }
+.field input[readonly]:focus { border-color: var(--line); }
+
+/* Google sign-in (Azure Container Apps authentication) */
+.account { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin: -8px 0 18px; font-size: 13px; color: var(--muted); }
+.account b { color: var(--text); font-weight: 600; }
+.acct-mail { opacity: .75; }
+.acct-link { color: var(--gold); text-decoration: none; }
+.acct-link:hover { text-decoration: underline; }
+.acct-note { font-size: 12px; }
+.btn.google { display: inline-flex; align-items: center; gap: 8px; background: #fff; color: #1f1f1f; border: 1px solid #dadce0; border-radius: 10px; padding: 8px 14px; font-weight: 600; text-decoration: none; }
+.btn.google:hover { background: #f3f4f6; }
 
 .lobby-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .lobby-actions .wide { grid-column: 1 / -1; }

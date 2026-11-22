@@ -13,6 +13,9 @@ public sealed class ConnectionTracker(TimeProvider time)
     private readonly Dictionary<PlayerId, int> _open = new();
     private readonly Dictionary<PlayerId, DateTimeOffset> _offlineSince = new();
 
+    /// <summary>Players with at least one open connection.</summary>
+    public int OnlineCount { get { lock (_lock) return _open.Count; } }
+
     public void Connected(PlayerId player)
     {
         lock (_lock)

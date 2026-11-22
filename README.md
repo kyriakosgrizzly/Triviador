@@ -52,6 +52,17 @@ to the JSON with a new unique `id`, or add documents in the portal's Data Explor
 Tech/Azure/.NET/Web, everything else → History). `GET /api/questions` shows where the questions are
 coming from and how many there are.
 
+## Sign in with Google
+
+Optional: players can sign in with Google (Azure Container Apps built-in authentication) or play as
+guests. Setup and how it works: [docs/AUTH.md](docs/AUTH.md).
+
+## Monitoring
+
+Application Insights via OpenTelemetry: requests, errors, logs, Cosmos DB calls and game metrics
+(questions by colour and outcome, games, players online). Queries and portal tour:
+[docs/INSIGHTS.md](docs/INSIGHTS.md).
+
 ## Deploy to Azure
 
 See [DEPLOY.md](DEPLOY.md): Azure Container Apps on the free tier, deployed by GitHub Actions

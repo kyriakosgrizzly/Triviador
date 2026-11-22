@@ -17,8 +17,8 @@ namespace Triviador.Server.Questions;
 /// the managed identity's role assignment still propagating after a fresh deployment) are retried
 /// with back-off. After that it reloads every <see cref="CosmosOptions.RefreshMinutes"/>.
 ///
-/// Cost: loading ~900 small documents is a few hundred RUs, which is nothing against the free tier's
-/// 1000 RU/s; seeding writes ~10 RUs per new document once.
+/// Cost: loading all 864 documents measured 14.2 RUs, nothing against the database's 400 RU/s;
+/// seeding writes ~10 RUs per new document, once.
 /// </summary>
 public sealed class CosmosQuestionLoader(
     QuestionCatalog catalog,

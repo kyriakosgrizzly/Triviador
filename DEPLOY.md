@@ -157,8 +157,12 @@ This deletes the app, environment and logs. The budget, Entra app and GitHub rep
 - **Infrastructure as code:** Bicep, `az deployment group/sub create`, outputs, secure parameters.
 - **Identity:** Entra app registrations, service principals, RBAC scoped to a resource group,
   workload identity federation (OIDC) instead of stored secrets.
-- **Monitoring:** Log Analytics workspace behind Container Apps; daily ingestion cap.
+- **Monitoring:** Log Analytics workspace behind Container Apps; daily ingestion cap; workspace-based
+  Application Insights fed by OpenTelemetry (Azure Monitor distro) with custom metrics. See
+  [docs/INSIGHTS.md](docs/INSIGHTS.md).
 - **Cosmos DB:** free tier, database-level shared throughput, partition keys, an account-wide throughput
   cap, data-plane RBAC with a managed identity and `disableLocalAuth`, the .NET SDK (point writes,
   cross-partition queries, request charges, 429 retries). See [docs/COSMOS.md](docs/COSMOS.md).
+- **Authentication:** Container Apps built-in auth with Google, anonymous access allowed, the
+  `X-MS-CLIENT-PRINCIPAL` headers, a client secret held as an app secret. See [docs/AUTH.md](docs/AUTH.md).
   Try: Portal → the container app → **Log stream**, or **Logs** with `ContainerAppConsoleLogs_CL`.
