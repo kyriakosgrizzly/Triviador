@@ -40,11 +40,17 @@ notes: [docs/CARDS.md](docs/CARDS.md). Start it from the lobby with **Play vs bo
 
 ## Questions
 
-300 multiple-choice and 55 number questions. The first ones are written out in
-`src/Triviador.Domain/Questions/SampleQuestions.cs`; the rest are in
-`src/Triviador.Domain/Questions/question-bank.json` (one question per line, embedded in the build).
-To add questions, add lines to the JSON with a new unique `id`. Quiz Cards sorts them into its four
-colours by `category` (Geography, Science, Tech/Azure/.NET/Web, everything else → History).
+789 multiple-choice and 75 number questions (about 180–220 per Quiz Cards colour). In Azure they are
+served from **Azure Cosmos DB for NoSQL** (free tier); locally, and whenever Cosmos isn't reachable, the
+server plays the same bank compiled into the build. See [docs/COSMOS.md](docs/COSMOS.md).
+
+The bank lives in `src/Triviador.Domain/Questions/SampleQuestions.cs` (the first 125) and
+`src/Triviador.Domain/Questions/question-bank.json` (one question per line). It also seeds Cosmos DB:
+on start-up the server inserts any id the container doesn't have yet. To add questions, either add lines
+to the JSON with a new unique `id`, or add documents in the portal's Data Explorer (they show up within
+30 minutes). Quiz Cards sorts them into its four colours by `category` (Geography, Science,
+Tech/Azure/.NET/Web, everything else → History). `GET /api/questions` shows where the questions are
+coming from and how many there are.
 
 ## Deploy to Azure
 

@@ -41,6 +41,7 @@ New subscriptions need the Container Apps and Log Analytics providers turned on:
 ```powershell
 az provider register --namespace Microsoft.App --wait
 az provider register --namespace Microsoft.OperationalInsights --wait
+az provider register --namespace Microsoft.DocumentDB --wait   # Cosmos DB, for the questions
 ```
 
 ## 2. Cost alert (before creating anything that runs)
@@ -157,4 +158,7 @@ This deletes the app, environment and logs. The budget, Entra app and GitHub rep
 - **Identity:** Entra app registrations, service principals, RBAC scoped to a resource group,
   workload identity federation (OIDC) instead of stored secrets.
 - **Monitoring:** Log Analytics workspace behind Container Apps; daily ingestion cap.
+- **Cosmos DB:** free tier, database-level shared throughput, partition keys, an account-wide throughput
+  cap, data-plane RBAC with a managed identity and `disableLocalAuth`, the .NET SDK (point writes,
+  cross-partition queries, request charges, 429 retries). See [docs/COSMOS.md](docs/COSMOS.md).
   Try: Portal → the container app → **Log stream**, or **Logs** with `ContainerAppConsoleLogs_CL`.

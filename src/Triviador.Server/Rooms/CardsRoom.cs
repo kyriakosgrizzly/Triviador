@@ -32,6 +32,7 @@ public sealed class CardsRoom : IGameRoom
         string id,
         IReadOnlyList<PlayerInfo> players,
         IReadOnlyDictionary<PlayerId, double> botAccuracy,
+        IReadOnlyList<Question> questions,
         IHubContext<GameHub, IGameClient> hub,
         TimeProvider time,
         GameOptions options,
@@ -42,7 +43,7 @@ public sealed class CardsRoom : IGameRoom
         _options = options;
         _rng = rng;
 
-        Game = new CardsGame(id, players, new CardQuestionPool(SampleQuestions.All, rng), time, rng);
+        Game = new CardsGame(id, players, new CardQuestionPool(questions, rng), time, rng);
         Humans = players.Where(p => !p.IsBot).Select(p => p.Id).ToList();
         // Card questions are easier than battle numerics, so card bots are a bit sharper (0.6–0.9).
         _bots = players.Where(p => p.IsBot).ToDictionary(p => p.Id, p => new CardsBot(p.Id, rng, Math.Min(0.9, botAccuracy[p.Id] + 0.15)));

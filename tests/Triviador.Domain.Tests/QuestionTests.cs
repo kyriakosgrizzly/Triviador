@@ -26,12 +26,12 @@ public class QuestionTests
     public void Embedded_bank_loads_and_covers_every_card_category()
     {
         var choice = SampleQuestions.All.OfType<MultipleChoiceQuestion>().ToList();
-        Assert.True(choice.Count >= 300, $"only {choice.Count} multiple-choice questions");
-        Assert.True(SampleQuestions.All.OfType<NumericQuestion>().Count() >= 55);
+        Assert.True(choice.Count >= 750, $"only {choice.Count} multiple-choice questions");
+        Assert.True(SampleQuestions.All.OfType<NumericQuestion>().Count() >= 70);
         foreach (var category in Enum.GetValues<CardCategory>())
         {
             var count = choice.Count(q => CardDeck.CategoryOf(q.Category) == category);
-            Assert.True(count >= 70, $"{category} has only {count} questions");
+            Assert.True(count >= 150, $"{category} has only {count} questions");
         }
         Assert.All(choice, q => Assert.Equal(q.Options.Count, q.Options.Distinct().Count()));
         Assert.Equal(SampleQuestions.All.Count, SampleQuestions.All.Select(q => q.Text).Distinct().Count());

@@ -4,7 +4,8 @@ namespace Triviador.Domain.Questions;
 
 /// <summary>
 /// The built-in question bank: the first questions are written out below, the rest (mc-101 onward,
-/// num-26 onward) live in question-bank.json, embedded in this assembly. Replaced by Cosmos DB in milestone 3.
+/// num-26 onward) live in question-bank.json, embedded in this assembly. In Azure the live questions come from
+/// Cosmos DB (see CosmosQuestionLoader); this bank seeds the container and is the fallback when Cosmos isn't reachable.
 /// </summary>
 public static class SampleQuestions
 {

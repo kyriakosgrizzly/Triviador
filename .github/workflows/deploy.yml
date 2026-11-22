@@ -17,6 +17,10 @@ env:
   # Region for the app. West Europe refused new customers, so default to Sweden Central.
   # Change it without editing code: repo Settings -> Variables -> AZURE_LOCATION.
   LOCATION: ${{ vars.AZURE_LOCATION || 'swedencentral' }}
+    # Cosmos DB free tier: only one account per subscription. Set the variable COSMOS_FREE_TIER=false if you already use it.
+  COSMOS_FREE_TIER: ${{ vars.COSMOS_FREE_TIER || 'true' }}
+  # Optional: your Entra object id, to browse/edit questions in Data Explorer.
+  COSMOS_ADMIN_PRINCIPAL_ID: ${{ vars.COSMOS_ADMIN_PRINCIPAL_ID || '' }}
 
 jobs:
   test:
@@ -80,6 +84,7 @@ jobs:
             --name "triviador-${GITHUB_RUN_NUMBER}" \
             --template-file infra/main.bicep \
             --parameters image="${{ steps.image.outputs.ref }}" location="$LOCATION" \
+            cosmosFreeTier="$COSMOS_FREE_TIER" cosmosAdminPrincipalId="$COSMOS_ADMIN_PRINCIPAL_ID" \
             --query properties.outputs.url.value \
             --output tsv)
           echo "### Triviador is live at $url" >> "$GITHUB_STEP_SUMMARY"

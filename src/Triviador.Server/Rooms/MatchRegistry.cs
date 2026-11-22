@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
 using Triviador.Domain;
+using Triviador.Domain.Questions;
 using Triviador.Server.Hubs;
 
 namespace Triviador.Server.Rooms;
@@ -14,6 +15,7 @@ public sealed class MatchRegistry(
     IHubContext<GameHub, IGameClient> hub,
     TimeProvider time,
     IOptions<GameOptions> options,
+    QuestionCatalog questions,
     ILogger<MatchRegistry> logger)
 {
     private static readonly string[] BotNames = ["Nino", "Giorgi", "Tamar", "Levan", "Ana", "Dato", "Mariam", "Luka"];
@@ -44,7 +46,7 @@ public sealed class MatchRegistry(
     public CardsRoom CreateCards(IReadOnlyList<PlayerInfo> humans, int seats)
     {
         var (seated, accuracy) = Seat(humans, Math.Max(0, seats - humans.Count));
-        var room = new CardsRoom(NewId(), seated, accuracy, hub, time, options.Value, new Random(_rng.Next()));
+        var room = new CardsRoom(NewId(), seated, accuracy, questions.All, hub, time, options.Value, new Random(_rng.Next()));
         return Register(room, humans, seated, "Cards");
     }
 
